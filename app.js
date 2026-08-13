@@ -6,6 +6,7 @@
 var RAW, GRAMMAR_TOPICS, GRAMMAR_EXERCISES, EXAM_DATA, QA_DATA, THEME_DATA;
 var EXAM_LABELS = ['가','나','다','라'];
 var ALL_WORDS, CATEGORIES, GRAMMAR_CATS, EX_CAT_MAP;
+var RELATED_BY_KR;
 
 function initData(){
   ALL_WORDS = [];
@@ -21,6 +22,67 @@ function initData(){
     var short = shortGrammarCat(full).replace(/\s*\([^)]*\)\s*$/, '').replace(/\s*—.*$/, '').trim();
     EX_CAT_MAP[short] = full;
   });
+  RELATED_BY_KR = {};
+  function link(a, b){
+    (RELATED_BY_KR[a] = RELATED_BY_KR[a] || {})[b] = true;
+  }
+  ALL_WORDS.forEach(function(w){
+    if(w.related && w.related.target){ link(w.kr, w.related.target); link(w.related.target, w.kr); }
+  });
+}
+/* ---- антонимы/синонимы: чтобы пара слова попадала в ту же подборку ---- */
+function partnerKrs(word){ return Object.keys(RELATED_BY_KR[word.kr] || {}); }
+function expandWithPairs(words, allowedPool){
+  var byKr = {};
+  allowedPool.forEach(function(w){ if(!byKr[w.kr]) byKr[w.kr] = w; });
+  var haveIds = {};
+  var result = words.slice();
+  result.forEach(function(w){ haveIds[w.id] = true; });
+  for(var i=0;i<result.length;i++){ // растущий список: новые партнёры тоже проверяются на свою пару (транзитивно)
+    partnerKrs(result[i]).forEach(function(kr){
+      var partner = byKr[kr];
+      if(partner && !haveIds[partner.id]){ result.push(partner); haveIds[partner.id] = true; }
+    });
+  }
+  return result;
+}
+function orderWithPairsAdjacent(words){
+  var byKr = {};
+  words.forEach(function(w){ if(!byKr[w.kr]) byKr[w.kr] = w; });
+  var used = {};
+  var result = [];
+  words.forEach(function(w){
+    if(used[w.id]) return;
+    result.push(w); used[w.id] = true;
+    partnerKrs(w).forEach(function(kr){
+      var p = byKr[kr];
+      if(p && !used[p.id]){ result.push(p); used[p.id] = true; }
+    });
+  });
+  return result;
+}
+function orderQuestionsWithPairsAdjacent(items){
+  function wordOf(item){
+    var q = item.q || item;
+    return q.word || null;
+  }
+  var byKr = {};
+  items.forEach(function(item){ var w = wordOf(item); if(w && !byKr[w.kr]) byKr[w.kr] = item; });
+  var used = {};
+  var result = [];
+  items.forEach(function(item, idx){
+    if(used[idx]) return;
+    result.push(item); used[idx] = true;
+    var w = wordOf(item);
+    if(!w) return;
+    partnerKrs(w).forEach(function(kr){
+      var pItem = byKr[kr];
+      if(!pItem) return;
+      var pIdx = items.indexOf(pItem);
+      if(pIdx !== -1 && !used[pIdx]){ result.push(pItem); used[pIdx] = true; }
+    });
+  });
+  return result;
 }
 var SHORT_NAMES = {
   'Неправильные глаголы/прилагательные — ㄷ (ㄷ받침 → ㄹ перед гласной)': 'Неправ. глаг. — ㄷ',
@@ -174,6 +236,8 @@ function qGrammar(ex){
   var opts = shuffle(ex.options.slice());
   return {type:'grammar', ex: ex, options: opts};
 }
+function qGrammarCard(item){ return {type:'gramcard', item: item}; }
+function qGrammarSpell(item){ return {type:'gramspell', item: item}; }
 
 /* ---- Экзамен: чтение ---- */
 function qExamReading(item){
@@ -233,11 +297,11 @@ function qThemeCloze(item){
 function qThemeDate(item){
   return {type:'themedate', item: item, options: shuffle(item.options.slice())};
 }
-function qThemeCounterType(item){ return {type:'countertype', item: item}; }
-function qThemeCounterTranslate(item){ return {type:'countertranslate', item: item}; }
-var MIXED_COUNTER_FACTORIES = [qThemeCloze, qThemeCounterType, qThemeCounterTranslate];
-function qThemeCounterMixed(item){
-  var factory = MIXED_COUNTER_FACTORIES[Math.floor(Math.random()*MIXED_COUNTER_FACTORIES.length)];
+function qThemeType(item){ return {type:'countertype', item: item}; }
+function qThemeTranslate(item){ return {type:'countertranslate', item: item}; }
+var MIXED_THEME_FACTORIES = [qThemeCloze, qThemeType, qThemeTranslate];
+function qThemeMixed(item){
+  var factory = MIXED_THEME_FACTORIES[Math.floor(Math.random()*MIXED_THEME_FACTORIES.length)];
   return factory(item);
 }
 function qAntSyn(word){
@@ -265,7 +329,8 @@ function initState(){
     wordsModeOpen: false,
     grammarCatOpen: false,
     grammarSelected: GRAMMAR_CATS.slice(),
-    grammarSub: 'reference', // 'reference' | 'practice'
+    grammarSub: 'reference', // 'reference' | 'practice' | 'cards'
+    grammarCardMode: 'flip', // 'flip' | 'type' (только для «Карточки»)
     examSub: 'reading', // 'reading' | 'ordering' | 'construct' | 'cloze'
     examSubOpen: false,
     qaSub: 'qword', // 'qword' | 'qanswer' | 'response'
@@ -310,7 +375,8 @@ function statsOverall(){
 
 /* ============ WORDS STANDALONE QUEUE ============ */
 function resetWordsQueue(){
-  var pool = shuffle(ALL_WORDS.filter(function(w){ return state.wordsSelected.indexOf(w.category) !== -1; }));
+  var filtered = ALL_WORDS.filter(function(w){ return state.wordsSelected.indexOf(w.category) !== -1; });
+  var pool = orderWithPairsAdjacent(shuffle(filtered));
   state.player.words = pool;
   state.player.index = 0;
   state.ui = {};
@@ -356,6 +422,25 @@ function advanceGrammar(){
   state.player.gindex = (state.player.gindex + 1) % (state.player.gwords.length || 1);
   rebuildGrammarQuestion();
 }
+function resetGrammarCardsQueue(){
+  var items = [];
+  GRAMMAR_TOPICS.forEach(function(t){
+    if(state.grammarSelected.indexOf(t.category) !== -1) items = items.concat(t.items);
+  });
+  state.player.gcwords = shuffle(items);
+  state.player.gcindex = 0;
+  rebuildGrammarCardsQuestion();
+}
+function rebuildGrammarCardsQuestion(){
+  var pool = state.player.gcwords || [];
+  var factory = state.grammarCardMode === 'type' ? qGrammarSpell : qGrammarCard;
+  state.player.gccurrent = pool.length ? factory(pool[state.player.gcindex % pool.length]) : null;
+  state.ui = {};
+}
+function advanceGrammarCards(){
+  state.player.gcindex = (state.player.gcindex + 1) % (state.player.gcwords.length || 1);
+  rebuildGrammarCardsQuestion();
+}
 
 /* ============ EXAM STANDALONE QUEUE ============ */
 var EXAM_FACTORY = { reading: qExamReading, ordering: qExamOrdering, construct: qExamConstruct, cloze: qExamCloze };
@@ -397,10 +482,13 @@ function advanceQA(){
 
 /* ============ THEME STANDALONE QUEUE ============ */
 var THEME_FACTORY = { counters: qThemeCloze, honorific: qThemeCloze, position: qThemeCloze, datetime: qThemeDate, irregular: qThemeCloze };
-function buildPerAnswerSample(items, perAnswer){
+var THEME_MODE_SECTIONS = ['counters','position','irregular']; // разделы с режимами Выбор/Впишите/Переведите/Смешанный
+function themeGroupKey(item){ return item.word || item.correct; }
+function buildPerAnswerSample(items, perAnswer, groupKeyFn){
+  var keyFn = groupKeyFn || function(item){ return item.correct; };
   var groups = {};
   items.forEach(function(item){
-    var key = item.correct;
+    var key = keyFn(item);
     (groups[key] = groups[key] || []).push(item);
   });
   var selected = [];
@@ -409,9 +497,40 @@ function buildPerAnswerSample(items, perAnswer){
   });
   return shuffle(selected);
 }
+/* если в выборку попало слово из antonym/synonym-пары (item.pairId), а его пара — нет, добираем её */
+function ensurePairedItems(allItems, selected, groupKeyFn){
+  var keyFn = groupKeyFn || function(item){ return item.correct; };
+  var itemsByGroupKey = {};
+  var groupKeysByPair = {};
+  allItems.forEach(function(item){
+    var gk = keyFn(item);
+    (itemsByGroupKey[gk] = itemsByGroupKey[gk] || []).push(item);
+    if(item.pairId){ (groupKeysByPair[item.pairId] = groupKeysByPair[item.pairId] || {})[gk] = true; }
+  });
+  var haveGroupKeys = {};
+  selected.forEach(function(item){ haveGroupKeys[keyFn(item)] = true; });
+  var result = selected.slice();
+  Object.keys(groupKeysByPair).forEach(function(pid){
+    var groupKeys = Object.keys(groupKeysByPair[pid]);
+    var anyPresent = groupKeys.some(function(gk){ return haveGroupKeys[gk]; });
+    if(!anyPresent) return;
+    groupKeys.forEach(function(gk){
+      if(haveGroupKeys[gk]) return;
+      var candidates = itemsByGroupKey[gk] || [];
+      if(candidates.length){ result.push(sample(candidates, 1)[0]); haveGroupKeys[gk] = true; }
+    });
+  });
+  return shuffle(result);
+}
 function resetThemeQueue(){
   var basePool = (THEME_DATA[state.themeSub] || []).slice();
-  var pool = state.themeSub === 'counters' ? buildPerAnswerSample(basePool, 2) : shuffle(basePool);
+  var pool;
+  if(THEME_MODE_SECTIONS.indexOf(state.themeSub) !== -1){
+    var groupKeyFn = state.themeSub === 'irregular' ? themeGroupKey : function(item){ return item.correct; };
+    pool = ensurePairedItems(basePool, buildPerAnswerSample(basePool, 2, groupKeyFn), groupKeyFn);
+  } else {
+    pool = shuffle(basePool);
+  }
   state.player.thwords = pool;
   state.player.thindex = 0;
   rebuildThemeQuestion();
@@ -419,10 +538,10 @@ function resetThemeQueue(){
 function rebuildThemeQuestion(){
   var pool = state.player.thwords || [];
   var factory;
-  if(state.themeSub === 'counters'){
-    factory = state.themeCounterMode === 'type' ? qThemeCounterType
-      : state.themeCounterMode === 'translate' ? qThemeCounterTranslate
-      : state.themeCounterMode === 'mixed' ? qThemeCounterMixed
+  if(THEME_MODE_SECTIONS.indexOf(state.themeSub) !== -1){
+    factory = state.themeCounterMode === 'type' ? qThemeType
+      : state.themeCounterMode === 'translate' ? qThemeTranslate
+      : state.themeCounterMode === 'mixed' ? qThemeMixed
       : qThemeCloze;
   } else {
     factory = THEME_FACTORY[state.themeSub];
@@ -461,7 +580,7 @@ function buildAdaptivePhases(wordSet, eligibleGrammar){
   var phases = [];
   var cumulative = [];
   batches.forEach(function(batch, i){
-    var phaseWords = shuffle(cumulative.concat(batch));
+    var phaseWords = orderWithPairsAdjacent(shuffle(cumulative.concat(batch)));
     var items = phaseWords.map(function(w){ return {q: qCard(w)}; });
     phases.push({
       type: 'cards',
@@ -482,7 +601,7 @@ function buildAdaptivePhases(wordSet, eligibleGrammar){
   sample(eligibleGrammar, Math.min(5, eligibleGrammar.length)).forEach(function(ex){
     finalItems.push({q: qGrammar(ex)});
   });
-  phases.push({ type:'final', label:'Смешанная практика — до идеала', items: shuffle(finalItems) });
+  phases.push({ type:'final', label:'Смешанная практика — до идеала', items: orderQuestionsWithPairsAdjacent(shuffle(finalItems)) });
   return phases;
 }
 function computeStatsList(phases){
@@ -493,8 +612,9 @@ function computeStatsList(phases){
 
 function startSession(){
   var allowedCategories = state.session.mode === 'lesson' ? categoriesForLessons(state.session.lessonSelected) : state.session.catSelected;
-  var pool = shuffle(ALL_WORDS.filter(function(w){ return allowedCategories.indexOf(w.category) !== -1; }));
-  var wordSet = pool.slice(0, state.session.size);
+  var categoryPool = ALL_WORDS.filter(function(w){ return allowedCategories.indexOf(w.category) !== -1; });
+  var pool = shuffle(categoryPool);
+  var wordSet = orderWithPairsAdjacent(expandWithPairs(pool.slice(0, state.session.size), categoryPool));
   state.session.wordSet = wordSet;
   var eligibleGrammar = state.session.mode === 'lesson'
     ? GRAMMAR_EXERCISES.filter(function(e){ return e.lesson.some(function(l){ return state.session.lessonSelected.indexOf(l) !== -1; }); })
@@ -605,6 +725,7 @@ function restartSessionSetup(){
 function getActiveQuestion(){
   if(state.view === 'session') return currentSessionQuestion();
   if(state.view === 'grammar' && state.grammarSub === 'practice') return state.player.gcurrent;
+  if(state.view === 'grammar' && state.grammarSub === 'cards') return state.player.gccurrent;
   if(state.view === 'exam') return state.player.excurrent;
   if(state.view === 'qa') return state.player.qacurrent;
   if(state.view === 'theme') return state.player.thcurrent;
@@ -613,6 +734,7 @@ function getActiveQuestion(){
 }
 function goNextAfterAnswer(){
   if(state.view === 'session') advanceSession();
+  else if(state.view === 'grammar' && state.grammarSub === 'cards') { advanceGrammarCards(); render(); }
   else if(state.view === 'grammar') { advanceGrammar(); render(); }
   else if(state.view === 'exam') { advanceExam(); render(); }
   else if(state.view === 'qa') { advanceQA(); render(); }
@@ -660,6 +782,7 @@ function handleTypeSubmit(value){
   if(q.type === 'spell') correct = q.word.kr;
   else if(q.type === 'countertype') correct = q.item.correct;
   else if(q.type === 'countertranslate') correct = (q.item.before + q.item.correct + q.item.after).trim();
+  else if(q.type === 'gramspell') correct = q.item.pattern;
   else correct = q.blank.matched;
   var isCorrect = value.trim() === correct;
   state.ui.typedValue = value;
@@ -825,6 +948,35 @@ function renderGrammar(q){
   out += '</div>';
   return out;
 }
+function renderGrammarCard(q){
+  var item = q.item;
+  var out = '<div class="stage"><div class="card' + (state.ui.flipped?' flipped':'') + '" id="flip-card">';
+  out += '<div class="face front"><div class="taegeuk-edge"></div><div class="cat-tag mono" style="max-width:75%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(item.lesson) + '</div>' +
+    '<div class="kr-word kr">' + esc(item.pattern) + '</div>' +
+    '<div class="hint">нажмите, чтобы перевернуть</div></div>';
+  out += '<div class="face back"><div class="taegeuk-edge"></div><div class="cat-tag mono" style="max-width:75%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(item.lesson) + '</div>' +
+    '<div class="meaning">' + esc(item.explanation) + '</div>' +
+    '<div class="notes"><b>Пример:</b> <span class="kr">' + esc(item.example.kr) + '</span> — ' + esc(item.example.ru) + '</div></div>';
+  out += '</div></div>';
+  out += '<div class="controls"><button class="btn btn-know" id="gram-card-next" style="width:100%">Далее</button></div>';
+  return out;
+}
+function renderGrammarSpell(q){
+  var item = q.item;
+  var out = '<div class="qcard"><div class="taegeuk-edge"></div>';
+  out += '<div class="q-translit mono" style="margin-bottom:2px">напишите конструкцию на корейском</div>';
+  out += '<div class="meaning" style="font-size:16px">' + esc(item.explanation) + '</div>';
+  out += '<div class="notes"><b>Пример:</b> ' + esc(item.example.ru) + '</div>';
+  out += '<form class="type-row" id="type-form"><input class="kr" id="type-input" value="' + esc(state.ui.typedValue||'') + '" placeholder="한국어" autocomplete="off"' + (state.ui.typedResult?' disabled':'') + '/>' +
+    '<button type="submit">' + (state.ui.typedResult ? 'Дальше' : 'Ответить') + '</button></form>';
+  if(state.ui.typedResult){
+    out += state.ui.typedResult === 'ok' ? '<div class="feedback ok">Верно!</div>' :
+      ('<div class="feedback bad">Правильно: <span class="ans kr">' + esc(item.pattern) + '</span></div>');
+    out += '<div class="notes"><span class="kr">' + esc(item.example.kr) + '</span> — ' + esc(item.example.ru) + '</div>';
+  }
+  out += '</div>';
+  return out;
+}
 function renderExamReading(q){
   var item = q.item;
   var out = '<div class="qcard"><div class="taegeuk-edge"></div>';
@@ -971,10 +1123,22 @@ function renderResponse(q){
   out += '</div>';
   return out;
 }
+/* «не меняется» / «неправильный» — только для раздела «Неправильные глаголы» */
+function regularBadge(item){
+  if(state.themeSub !== 'irregular' || item.regular === undefined) return '';
+  return '<span style="margin-left:8px;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;' +
+    (item.regular ? 'background:#e9f3ec;color:var(--green)' : 'background:#fbe9e7;color:var(--red)') + '">' +
+    (item.regular ? 'не меняется' : 'неправильный') + '</span>';
+}
+function themeTypePrompt(){
+  if(state.themeSub === 'counters') return 'впишите счётное слово';
+  if(state.themeSub === 'irregular') return 'впишите правильную форму';
+  return 'впишите слово';
+}
 function renderThemeCloze(q){
   var item = q.item;
   var out = '<div class="qcard"><div class="taegeuk-edge"></div>';
-  out += '<div class="q-translit mono" style="margin-bottom:10px">выберите правильный вариант</div>';
+  out += '<div class="q-translit mono" style="margin-bottom:10px">выберите правильный вариант' + regularBadge(item) + '</div>';
   var mid = state.ui.chosen ? ('<span class="gap-fill kr">' + esc(state.ui.chosen) + '</span>') : '<span class="gap"></span>';
   out += '<div class="sent-blank kr" style="font-size:17px">' + esc(item.before) + mid + esc(item.after) + '</div>';
   q.options.forEach(function(opt){
@@ -993,7 +1157,7 @@ function renderThemeCloze(q){
 function renderCounterType(q){
   var item = q.item;
   var out = '<div class="qcard"><div class="taegeuk-edge"></div>';
-  out += '<div class="q-translit mono" style="margin-bottom:10px">впишите счётное слово</div>';
+  out += '<div class="q-translit mono" style="margin-bottom:10px">' + themeTypePrompt() + regularBadge(item) + '</div>';
   out += '<div class="sent-blank kr">' + esc(item.before) + '<span class="gap"></span>' + esc(item.after) + '</div>';
   out += '<div class="sent-ru">' + esc(item.ru) + '</div>';
   out += '<form class="type-row" id="type-form"><input class="kr" id="type-input" value="' + esc(state.ui.typedValue||'') + '" placeholder="한국어" autocomplete="off"' + (state.ui.typedResult?' disabled':'') + '/>' +
@@ -1009,7 +1173,7 @@ function renderCounterTranslate(q){
   var item = q.item;
   var fullSentence = (item.before + item.correct + item.after).trim();
   var out = '<div class="qcard"><div class="taegeuk-edge"></div>';
-  out += '<div class="q-translit mono" style="margin-bottom:10px">переведите предложение на корейский</div>';
+  out += '<div class="q-translit mono" style="margin-bottom:10px">переведите предложение на корейский' + regularBadge(item) + '</div>';
   out += '<div class="notes" style="font-size:16px;margin-bottom:16px">' + esc(item.ru) + '</div>';
   out += '<form class="type-row" id="type-form"><input class="kr" id="type-input" value="' + esc(state.ui.typedValue||'') + '" placeholder="한국어 문장" autocomplete="off"' + (state.ui.typedResult?' disabled':'') + '/>' +
     '<button type="submit">' + (state.ui.typedResult ? 'Дальше' : 'Ответить') + '</button></form>';
@@ -1057,6 +1221,8 @@ function renderQuestionCard(q){
   if(q.type === 'themedate') return renderThemeDate(q);
   if(q.type === 'countertype') return renderCounterType(q);
   if(q.type === 'countertranslate') return renderCounterTranslate(q);
+  if(q.type === 'gramcard') return renderGrammarCard(q);
+  if(q.type === 'gramspell') return renderGrammarSpell(q);
   return '';
 }
 
@@ -1152,11 +1318,35 @@ function renderGrammarPractice(){
   html += resetIconBtn('reshuffle-grammar');
   return html;
 }
+function renderGrammarCards(){
+  var html = '<div class="panel"><div class="panel-row" id="gcat-toggle"><span class="label">Темы</span>' +
+    '<span class="value mono">' + (state.grammarSelected.length===GRAMMAR_CATS.length ? 'все' : state.grammarSelected.length + ' из ' + GRAMMAR_CATS.length) +
+    '<span class="chev' + (state.grammarCatOpen?' open':'') + '">▾</span></span></div>';
+  html += '<div class="cat-actions' + (state.grammarCatOpen?' open':'') + '"><button id="gcat-all">Выбрать все</button><button id="gcat-none">Снять все</button></div>';
+  html += '<div class="cat-grid' + (state.grammarCatOpen?' open':'') + '">';
+  GRAMMAR_CATS.forEach(function(c){ html += '<div class="cat-chip' + (state.grammarSelected.indexOf(c)!==-1?' active':'') + '" data-gcat="' + esc(c) + '">' + esc(shortGrammarCat(c)) + '</div>'; });
+  html += '</div></div>';
+  var modes = [['flip','Карточки'],['type','Написание']];
+  html += '<div class="sub-toggle" style="margin-bottom:14px">';
+  modes.forEach(function(m){ html += '<button data-gcardmode="' + m[0] + '" class="' + (state.grammarCardMode===m[0]?'active':'') + '">' + m[1] + '</button>'; });
+  html += '</div>';
+  var pool = state.player.gcwords || [];
+  if(pool.length){
+    var pct = Math.round((( (state.player.gcindex % pool.length) +1)/pool.length)*100);
+    html += '<div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%"></div></div>';
+  }
+  html += renderQuestionCard(state.player.gccurrent);
+  html += resetIconBtn('reshuffle-gramcards');
+  return html;
+}
 function renderGrammarView(){
   var html = '<div class="sub-toggle">' +
     '<button data-gsub="reference" class="' + (state.grammarSub==='reference'?'active':'') + '">Справочник</button>' +
-    '<button data-gsub="practice" class="' + (state.grammarSub==='practice'?'active':'') + '">Тренировка</button></div>';
-  html += state.grammarSub === 'reference' ? renderGrammarReference() : renderGrammarPractice();
+    '<button data-gsub="practice" class="' + (state.grammarSub==='practice'?'active':'') + '">Тренировка</button>' +
+    '<button data-gsub="cards" class="' + (state.grammarSub==='cards'?'active':'') + '">Карточки</button></div>';
+  html += state.grammarSub === 'reference' ? renderGrammarReference()
+    : state.grammarSub === 'cards' ? renderGrammarCards()
+    : renderGrammarPractice();
   return html;
 }
 
@@ -1344,7 +1534,7 @@ function renderThemeView(){
   html += '<div class="cat-grid' + (state.themeSubOpen?' open':'') + '">';
   subs.forEach(function(s){ html += '<div class="cat-chip' + (state.themeSub===s[0]?' active':'') + '" data-themesub="' + s[0] + '">' + s[1] + '</div>'; });
   html += '</div></div>';
-  if(state.themeSub === 'counters'){
+  if(THEME_MODE_SECTIONS.indexOf(state.themeSub) !== -1){
     var modes = [['choice','Выбор'],['type','Впишите слово'],['translate','Переведите'],['mixed','Смешанный']];
     html += '<div class="sub-toggle" style="margin-bottom:14px;flex-wrap:wrap">';
     modes.forEach(function(m){ html += '<button data-countermode="' + m[0] + '" style="font-size:11.5px;padding:9px 4px;min-width:70px" class="' + (state.themeCounterMode===m[0]?'active':'') + '">' + m[1] + '</button>'; });
@@ -1400,8 +1590,12 @@ function attachHandlers(){
   gsubs.forEach(function(el){ el.onclick = function(){
     state.grammarSub = el.getAttribute('data-gsub');
     if(state.grammarSub === 'practice') resetGrammarQueue();
+    else if(state.grammarSub === 'cards') resetGrammarCardsQueue();
     render();
   }; });
+  document.querySelectorAll('[data-gcardmode]').forEach(function(el){
+    el.onclick = function(){ state.grammarCardMode = el.getAttribute('data-gcardmode'); rebuildGrammarCardsQuestion(); render(); };
+  });
 
   // words category filter
   var catToggle = document.getElementById('cat-toggle');
@@ -1442,20 +1636,31 @@ function attachHandlers(){
   var gcatToggle = document.getElementById('gcat-toggle');
   if(gcatToggle) gcatToggle.onclick = function(){ state.grammarCatOpen = !state.grammarCatOpen; render(); };
   var gcatAll = document.getElementById('gcat-all');
-  if(gcatAll) gcatAll.onclick = function(){ state.grammarSelected = GRAMMAR_CATS.slice(); resetGrammarQueue(); render(); };
+  if(gcatAll) gcatAll.onclick = function(){
+    state.grammarSelected = GRAMMAR_CATS.slice();
+    if(state.grammarSub === 'cards') resetGrammarCardsQueue(); else resetGrammarQueue();
+    render();
+  };
   var gcatNone = document.getElementById('gcat-none');
-  if(gcatNone) gcatNone.onclick = function(){ state.grammarSelected = []; resetGrammarQueue(); render(); };
+  if(gcatNone) gcatNone.onclick = function(){
+    state.grammarSelected = [];
+    if(state.grammarSub === 'cards') resetGrammarCardsQueue(); else resetGrammarQueue();
+    render();
+  };
   document.querySelectorAll('.cat-chip[data-gcat]').forEach(function(el){
     el.onclick = function(){
       var c = el.getAttribute('data-gcat');
       var i = state.grammarSelected.indexOf(c);
       if(i === -1) state.grammarSelected.push(c); else state.grammarSelected.splice(i,1);
       if(state.grammarSub === 'practice'){ resetGrammarQueue(); }
+      else if(state.grammarSub === 'cards'){ resetGrammarCardsQueue(); }
       render();
     };
   });
   var reshuffleG = document.getElementById('reshuffle-grammar');
   if(reshuffleG) reshuffleG.onclick = function(){ resetGrammarQueue(); render(); };
+  var reshuffleGC = document.getElementById('reshuffle-gramcards');
+  if(reshuffleGC) reshuffleGC.onclick = function(){ resetGrammarCardsQueue(); render(); };
 
   // exam sub-tabs
   document.querySelectorAll('.cat-chip[data-examsub]').forEach(function(el){
@@ -1550,6 +1755,8 @@ function attachHandlers(){
   if(btnAgain) btnAgain.onclick = function(e){ e.stopPropagation(); handleCardRate('learning'); };
   var btnKnow = document.getElementById('btn-know');
   if(btnKnow) btnKnow.onclick = function(e){ e.stopPropagation(); handleCardRate('known'); };
+  var gramCardNext = document.getElementById('gram-card-next');
+  if(gramCardNext) gramCardNext.onclick = function(e){ e.stopPropagation(); goNextAfterAnswer(); };
 
   // choice options (kr2ru, ru2kr, sentchoice, grammar)
   document.querySelectorAll('.opt[data-choice]').forEach(function(el){
