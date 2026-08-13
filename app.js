@@ -1048,7 +1048,7 @@ function renderGrammarSpell(q){
 function renderExamReading(q){
   var item = q.item;
   var out = '<div class="qcard"><div class="taegeuk-edge"></div>';
-  out += '<div class="notes" style="font-size:15px;line-height:1.7;margin-bottom:16px;padding:14px;background:var(--paper);border-radius:12px" class="kr">' + esc(item.passage) + '</div>';
+  out += '<div class="notes kr" style="font-size:15px;line-height:1.7;margin-bottom:16px;padding:14px;background:var(--paper);border-radius:12px;max-width:none">' + esc(item.passage) + '</div>';
   out += '<div class="q-translit mono" style="text-align:left;margin-bottom:12px">' + esc(item.question) + '</div>';
   q.options.forEach(function(opt){
     var cls = 'opt';
