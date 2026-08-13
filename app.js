@@ -6,7 +6,7 @@
 var RAW, GRAMMAR_TOPICS, GRAMMAR_EXERCISES, EXAM_DATA, QA_DATA, THEME_DATA;
 var EXAM_LABELS = ['가','나','다','라'];
 var ALL_WORDS, CATEGORIES, GRAMMAR_CATS, EX_CAT_MAP;
-var RELATED_BY_KR;
+var RELATED_BY_KR, WORDS_BY_ID;
 
 function initData(){
   ALL_WORDS = [];
@@ -16,6 +16,8 @@ function initData(){
     });
   });
   CATEGORIES = RAW.map(function(c){ return c.category; });
+  WORDS_BY_ID = {};
+  ALL_WORDS.forEach(function(w){ WORDS_BY_ID[w.id] = w; });
   GRAMMAR_CATS = GRAMMAR_TOPICS.map(function(t){ return t.category; });
   EX_CAT_MAP = {};
   GRAMMAR_CATS.forEach(function(full){
@@ -322,11 +324,13 @@ function initState(){
   state = {
     loaded: false,
     progress: {},
+    excluded: {},
     view: 'session', // 'session' | 'words' | 'grammar'
     wordsCatOpen: false,
     wordsSelected: CATEGORIES.slice(),
     wordsMode: 'cards',
     wordsModeOpen: false,
+    excludedPanelOpen: false,
     grammarCatOpen: false,
     grammarSelected: GRAMMAR_CATS.slice(),
     grammarSub: 'reference', // 'reference' | 'practice' | 'cards'
@@ -350,11 +354,65 @@ function initState(){
   };
 }
 
+var EXCLUDED_KEY = 'excluded-v1';
+function loadExcluded(){
+  try{
+    var raw = localStorage.getItem(EXCLUDED_KEY);
+    if(raw) state.excluded = JSON.parse(raw);
+  }catch(e){}
+}
+function saveExcluded(){ try{ localStorage.setItem(EXCLUDED_KEY, JSON.stringify(state.excluded)); }catch(e){} }
+function excludeWord(id){ state.excluded[id] = true; saveExcluded(); purgeExcludedFromLiveQueues(id); }
+function restoreWord(id){ delete state.excluded[id]; saveExcluded(); }
+/* убрать слово из уже построенных очередей сессии/раздела «Слова», чтобы оно не всплыло позже в том же проходе */
+function purgeExcludedFromLiveQueues(id){
+  function isMatch(q){ return q && q.word && q.word.id === id; }
+  if(state.player.words && state.player.words.length){
+    var removedBefore = 0;
+    var filteredWords = [];
+    state.player.words.forEach(function(w, i){
+      if(w.id === id){ if(i <= state.player.index) removedBefore++; }
+      else filteredWords.push(w);
+    });
+    state.player.words = filteredWords;
+    state.player.index = filteredWords.length ? Math.max(0, state.player.index - removedBefore) : 0;
+  }
+  if(state.session.stages && state.session.stages.length){
+    state.session.stages.forEach(function(st){
+      var removedBefore = 0;
+      var filteredQueue = [];
+      st.queue.forEach(function(q, i){
+        if(isMatch(q)){ if(i <= st.index) removedBefore++; }
+        else filteredQueue.push(q);
+      });
+      st.queue = filteredQueue;
+      st.index = filteredQueue.length ? Math.max(0, Math.min(st.index - removedBefore, filteredQueue.length - 1)) : 0;
+    });
+  }
+  if(state.session.mq && state.session.mq.items && state.session.mq.items.length){
+    var mq = state.session.mq;
+    var removedBeforeMq = 0;
+    var filteredMq = [];
+    mq.items.forEach(function(item, i){
+      if(isMatch(item.q)){ if(i <= mq.idx) removedBeforeMq++; }
+      else filteredMq.push(item);
+    });
+    mq.items = filteredMq;
+    mq.idx = filteredMq.length ? Math.max(0, Math.min(mq.idx - removedBeforeMq, filteredMq.length - 1)) : 0;
+  }
+  if(state.session.phases && state.session.phases.length){
+    state.session.phases.forEach(function(ph){
+      ph.items = ph.items.filter(function(item){ return !isMatch(item.q); });
+    });
+  }
+}
+
 function loadProgress(){
   try{
     var raw = localStorage.getItem(STORAGE_KEY);
     if(raw) state.progress = JSON.parse(raw);
   }catch(e){}
+  loadExcluded();
   state.loaded = true;
   resetWordsQueue();
   resetGrammarQueue();
@@ -375,7 +433,7 @@ function statsOverall(){
 
 /* ============ WORDS STANDALONE QUEUE ============ */
 function resetWordsQueue(){
-  var filtered = ALL_WORDS.filter(function(w){ return state.wordsSelected.indexOf(w.category) !== -1; });
+  var filtered = ALL_WORDS.filter(function(w){ return state.wordsSelected.indexOf(w.category) !== -1 && !state.excluded[w.id]; });
   var pool = orderWithPairsAdjacent(shuffle(filtered));
   state.player.words = pool;
   state.player.index = 0;
@@ -612,7 +670,7 @@ function computeStatsList(phases){
 
 function startSession(){
   var allowedCategories = state.session.mode === 'lesson' ? categoriesForLessons(state.session.lessonSelected) : state.session.catSelected;
-  var categoryPool = ALL_WORDS.filter(function(w){ return allowedCategories.indexOf(w.category) !== -1; });
+  var categoryPool = ALL_WORDS.filter(function(w){ return allowedCategories.indexOf(w.category) !== -1 && !state.excluded[w.id]; });
   var pool = shuffle(categoryPool);
   var wordSet = orderWithPairsAdjacent(expandWithPairs(pool.slice(0, state.session.size), categoryPool));
   state.session.wordSet = wordSet;
@@ -749,6 +807,14 @@ function handleCardRate(status){
   goNextAfterAnswer();
 }
 function handleFlip(){ state.ui.flipped = !state.ui.flipped; render(); }
+function handleExcludeWord(){
+  var q = getActiveQuestion();
+  if(!q || q.type !== 'card') return;
+  excludeWord(q.word.id);
+  state.ui = {};
+  if(state.view === 'words') rebuildStandaloneQuestion();
+  render();
+}
 function handleChoice(optValue){
   var q = getActiveQuestion();
   if(!q || state.ui.chosen) return;
@@ -835,7 +901,9 @@ function renderCard(q){
     if(examples.length) backContent = '<div class="notes"><b>Пример:</b> ' + esc(examples[0].kr) + ' — ' + esc(examples[0].ru) + '</div>';
     else if(word.notes) backContent = '<div class="notes">' + esc(word.notes) + '</div>';
   }
-  var out = '<div class="stage"><div class="card' + (state.ui.flipped?' flipped':'') + '" id="flip-card">';
+  var out = '<div class="stage">';
+  out += '<button class="btn-exclude" id="exclude-word" title="Убрать это слово из упражнений">✕</button>';
+  out += '<div class="card' + (state.ui.flipped?' flipped':'') + '" id="flip-card">';
   out += '<div class="face front"><div class="taegeuk-edge"></div><div class="cat-tag">' + esc(shortCat(word.category)) + '</div>' +
     '<div class="kr-word kr">' + esc(word.kr) + '</div><div class="translit mono">' + esc(word.translit) + '</div>' +
     '<div class="hint">нажмите, чтобы перевернуть</div></div>';
@@ -1266,6 +1334,26 @@ function renderWordsView(){
   modes.forEach(function(m){ html += '<div class="cat-chip' + (state.wordsMode===m[0]?' active':'') + '" data-wmode="' + m[0] + '">' + m[1] + '</div>'; });
   html += '</div></div>';
 
+  var excludedIds = Object.keys(state.excluded);
+  html += '<div class="panel"><div class="panel-row" id="excluded-toggle"><span class="label">Скрытые слова</span>' +
+    '<span class="value mono">' + excludedIds.length + '<span class="chev' + (state.excludedPanelOpen?' open':'') + '">▾</span></span></div>';
+  if(state.excludedPanelOpen){
+    if(!excludedIds.length){
+      html += '<div class="hint" style="padding:2px 2px 6px">Пока нет скрытых слов</div>';
+    } else {
+      html += '<div class="excluded-list">';
+      excludedIds.forEach(function(id){
+        var w = WORDS_BY_ID[id];
+        if(!w) return;
+        html += '<div class="excluded-row"><span class="kr">' + esc(w.kr) + '</span>' +
+          '<span class="excluded-meaning">' + esc(w.meaning) + '</span>' +
+          '<button data-restore="' + esc(id) + '">Вернуть</button></div>';
+      });
+      html += '</div>';
+    }
+  }
+  html += '</div>';
+
   var pool = state.player.words || [];
   if(pool.length){
     var pct = Math.round((( (state.player.index % pool.length) +1)/pool.length)*100);
@@ -1616,6 +1704,15 @@ function attachHandlers(){
   });
   var wmodeToggle = document.getElementById('wmode-toggle');
   if(wmodeToggle) wmodeToggle.onclick = function(){ state.wordsModeOpen = !state.wordsModeOpen; render(); };
+  var excludedToggle = document.getElementById('excluded-toggle');
+  if(excludedToggle) excludedToggle.onclick = function(){ state.excludedPanelOpen = !state.excludedPanelOpen; render(); };
+  document.querySelectorAll('[data-restore]').forEach(function(el){
+    el.onclick = function(){
+      restoreWord(el.getAttribute('data-restore'));
+      resetWordsQueue();
+      render();
+    };
+  });
   document.querySelectorAll('.cat-chip[data-wmode]').forEach(function(el){
     el.onclick = function(){
       state.wordsMode = el.getAttribute('data-wmode');
@@ -1761,6 +1858,8 @@ function attachHandlers(){
   if(btnKnow) btnKnow.onclick = function(e){ e.stopPropagation(); handleCardRate('known'); };
   var gramCardNext = document.getElementById('gram-card-next');
   if(gramCardNext) gramCardNext.onclick = function(e){ e.stopPropagation(); goNextAfterAnswer(); };
+  var excludeBtn = document.getElementById('exclude-word');
+  if(excludeBtn) excludeBtn.onclick = function(e){ e.stopPropagation(); handleExcludeWord(); };
 
   // choice options (kr2ru, ru2kr, sentchoice, grammar)
   document.querySelectorAll('.opt[data-choice]').forEach(function(el){
