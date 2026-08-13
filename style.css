@@ -79,10 +79,10 @@ header{ display:flex; align-items:center; justify-content:space-between; margin-
 .opt.wrong{ background:#fbe9e7; border-color:var(--red); color:#7a2b26; }
 .opt:disabled{ cursor:default; }
 
-.type-row{ display:flex; gap:8px; margin-top:6px; }
-.type-row input{ flex:1; padding:13px 14px; border-radius:12px; border:1.5px solid var(--line); font-size:16px; outline:none; background:var(--paper); }
+.type-row{ display:flex; gap:8px; margin-top:6px; flex-wrap:wrap; }
+.type-row input{ flex:1 1 140px; min-width:0; padding:13px 14px; border-radius:12px; border:1.5px solid var(--line); font-size:16px; outline:none; background:var(--paper); }
 .type-row input:focus{ border-color:var(--ink); }
-.type-row button{ padding:0 18px; border-radius:12px; border:none; background:var(--ink); color:#fff; font-weight:600; cursor:pointer; font-size:13.5px; }
+.type-row button{ flex:0 0 auto; padding:0 18px; border-radius:12px; border:none; background:var(--ink); color:#fff; font-weight:600; cursor:pointer; font-size:13.5px; white-space:nowrap; }
 .feedback{ margin-top:14px; padding:12px 14px; border-radius:12px; font-size:14px; line-height:1.5; }
 .feedback.ok{ background:#e9f3ec; color:#2c4c3b; }
 .feedback.bad{ background:#fbe9e7; color:#7a2b26; }
