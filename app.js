@@ -198,7 +198,7 @@ function shuffle(arr){
 }
 function sample(arr, n){ return shuffle(arr).slice(0, n); }
 function esc(s){ var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
-function resetIconBtn(id){ return '<div class="reset-row"><button class="btn-icon-sm" id="' + id + '" title="Сбросить прогресс и перемешать">\u21BB</button></div>'; }
+function resetIconBtn(id, title){ return '<div class="reset-row"><button class="btn-icon-sm" id="' + id + '" title="' + esc(title || 'Сбросить прогресс и перемешать') + '">\u21BB</button></div>'; }
 
 /* ============ QUESTION FACTORIES ============ */
 function distractorMeanings(word, n){
@@ -1413,6 +1413,7 @@ function renderSessionRunning(){
     var pct = Math.round((masteredInPhase/phase.items.length)*100);
     html += '<div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%"></div></div>';
     html += renderQuestionCard(item.q);
+    html += resetIconBtn('session-back-to-setup', 'Прервать сессию и вернуться к выбору');
     return html;
   }
   var st = currentStage();
@@ -1422,6 +1423,7 @@ function renderSessionRunning(){
   var pct = Math.round(((st.index+1)/st.queue.length)*100);
   html += '<div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%"></div></div>';
   html += renderQuestionCard(st.queue[st.index]);
+  html += resetIconBtn('session-back-to-setup', 'Прервать сессию и вернуться к выбору');
   return html;
 }
 function renderSessionDone(){
@@ -1747,6 +1749,8 @@ function attachHandlers(){
   if(startBtn) startBtn.onclick = function(){ startSession(); };
   var restartBtn = document.getElementById('restart-session');
   if(restartBtn) restartBtn.onclick = function(){ restartSessionSetup(); };
+  var sessionBackBtn = document.getElementById('session-back-to-setup');
+  if(sessionBackBtn) sessionBackBtn.onclick = function(){ restartSessionSetup(); };
 
   // card flip + rate
   var flipCard = document.getElementById('flip-card');
