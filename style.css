@@ -16,7 +16,7 @@ body{
   min-height:100vh; display:flex; flex-direction:column; align-items:center;
   padding:20px 14px 60px;
 }
-.kr{ font-family:"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif; }
+.kr{ font-family:"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif; word-break:keep-all; }
 .mono{ font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
 .wrap{ width:100%; max-width:640px; }
 

@@ -21,7 +21,7 @@ function initData(){
   GRAMMAR_CATS = GRAMMAR_TOPICS.map(function(t){ return t.category; });
   EX_CAT_MAP = {};
   GRAMMAR_CATS.forEach(function(full){
-    var short = shortGrammarCat(full).replace(/\s*\([^)]*\)\s*$/, '').replace(/\s*—.*$/, '').trim();
+    var short = shortGrammarCat(full).split(/\s*[(—]/)[0].trim();
     EX_CAT_MAP[short] = full;
   });
   RELATED_BY_KR = {};
@@ -466,7 +466,8 @@ function advanceStandalone(){
 
 /* ============ GRAMMAR STANDALONE QUEUE ============ */
 function resetGrammarQueue(){
-  var pool = shuffle(GRAMMAR_EXERCISES.filter(function(e){ return state.grammarSelected.indexOf(exCatFull(e)) !== -1; }));
+  var filtered = GRAMMAR_EXERCISES.filter(function(e){ return state.grammarSelected.indexOf(exCatFull(e)) !== -1; });
+  var pool = buildPerAnswerSample(filtered, 5, function(e){ return e.pattern; });
   state.player.gwords = pool;
   state.player.gindex = 0;
   rebuildGrammarQuestion();
@@ -1191,12 +1192,10 @@ function renderResponse(q){
   out += '</div>';
   return out;
 }
-/* «не меняется» / «неправильный» — только для раздела «Неправильные глаголы» */
-function regularBadge(item){
-  if(state.themeSub !== 'irregular' || item.regular === undefined) return '';
-  return '<span style="margin-left:8px;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;' +
-    (item.regular ? 'background:#e9f3ec;color:var(--green)' : 'background:#fbe9e7;color:var(--red)') + '">' +
-    (item.regular ? 'не меняется' : 'неправильный') + '</span>';
+/* словарная форма слова — только для раздела «Неправильные глаголы», без подсказки «обычный/неправильный» */
+function baseFormLabel(item){
+  if(state.themeSub !== 'irregular' || !item.word) return '';
+  return '<div class="q-translit mono" style="margin-bottom:6px">словарная форма: <span class="kr">' + esc(item.word) + '</span></div>';
 }
 function themeTypePrompt(){
   if(state.themeSub === 'counters') return 'впишите счётное слово';
@@ -1206,7 +1205,8 @@ function themeTypePrompt(){
 function renderThemeCloze(q){
   var item = q.item;
   var out = '<div class="qcard"><div class="taegeuk-edge"></div>';
-  out += '<div class="q-translit mono" style="margin-bottom:10px">выберите правильный вариант' + regularBadge(item) + '</div>';
+  out += baseFormLabel(item);
+  out += '<div class="q-translit mono" style="margin-bottom:10px">выберите правильный вариант</div>';
   var mid = state.ui.chosen ? ('<span class="gap-fill kr">' + esc(state.ui.chosen) + '</span>') : '<span class="gap"></span>';
   out += '<div class="sent-blank kr" style="font-size:17px">' + esc(item.before) + mid + esc(item.after) + '</div>';
   q.options.forEach(function(opt){
@@ -1225,7 +1225,8 @@ function renderThemeCloze(q){
 function renderCounterType(q){
   var item = q.item;
   var out = '<div class="qcard"><div class="taegeuk-edge"></div>';
-  out += '<div class="q-translit mono" style="margin-bottom:10px">' + themeTypePrompt() + regularBadge(item) + '</div>';
+  out += baseFormLabel(item);
+  out += '<div class="q-translit mono" style="margin-bottom:10px">' + themeTypePrompt() + '</div>';
   out += '<div class="sent-blank kr">' + esc(item.before) + '<span class="gap"></span>' + esc(item.after) + '</div>';
   out += '<div class="sent-ru">' + esc(item.ru) + '</div>';
   out += '<form class="type-row" id="type-form"><input class="kr" id="type-input" value="' + esc(state.ui.typedValue||'') + '" placeholder="한국어" autocomplete="off"' + (state.ui.typedResult?' disabled':'') + '/>' +
@@ -1241,7 +1242,8 @@ function renderCounterTranslate(q){
   var item = q.item;
   var fullSentence = (item.before + item.correct + item.after).trim();
   var out = '<div class="qcard"><div class="taegeuk-edge"></div>';
-  out += '<div class="q-translit mono" style="margin-bottom:10px">переведите предложение на корейский' + regularBadge(item) + '</div>';
+  out += baseFormLabel(item);
+  out += '<div class="q-translit mono" style="margin-bottom:10px">переведите предложение на корейский</div>';
   out += '<div class="notes" style="font-size:16px;margin-bottom:16px">' + esc(item.ru) + '</div>';
   out += '<form class="type-row" id="type-form"><input class="kr" id="type-input" value="' + esc(state.ui.typedValue||'') + '" placeholder="한국어 문장" autocomplete="off"' + (state.ui.typedResult?' disabled':'') + '/>' +
     '<button type="submit">' + (state.ui.typedResult ? 'Дальше' : 'Ответить') + '</button></form>';
