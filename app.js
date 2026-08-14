@@ -1863,7 +1863,18 @@ function attachHandlers(){
   if(reshuffleTheme) reshuffleTheme.onclick = function(){ resetThemeQueue(); render(); };
 
   var searchInput = document.getElementById('search-input');
-  if(searchInput) searchInput.oninput = function(){ state.searchQuery = searchInput.value; render(); };
+  if(searchInput){
+    searchInput.addEventListener('compositionstart', function(){ state.searchComposing = true; });
+    searchInput.addEventListener('compositionend', function(){
+      state.searchComposing = false;
+      state.searchQuery = searchInput.value;
+      render();
+    });
+    searchInput.oninput = function(){
+      state.searchQuery = searchInput.value;
+      if(!state.searchComposing) render();
+    };
+  }
   document.querySelectorAll('[data-tap]').forEach(function(el){
     el.onclick = function(){ if(el.disabled) return; handleConstructTap(el.getAttribute('data-tap')); };
   });
