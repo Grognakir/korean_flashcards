@@ -1334,26 +1334,6 @@ function renderWordsView(){
   modes.forEach(function(m){ html += '<div class="cat-chip' + (state.wordsMode===m[0]?' active':'') + '" data-wmode="' + m[0] + '">' + m[1] + '</div>'; });
   html += '</div></div>';
 
-  var excludedIds = Object.keys(state.excluded);
-  html += '<div class="panel"><div class="panel-row" id="excluded-toggle"><span class="label">Скрытые слова</span>' +
-    '<span class="value mono">' + excludedIds.length + '<span class="chev' + (state.excludedPanelOpen?' open':'') + '">▾</span></span></div>';
-  if(state.excludedPanelOpen){
-    if(!excludedIds.length){
-      html += '<div class="hint" style="padding:2px 2px 6px">Пока нет скрытых слов</div>';
-    } else {
-      html += '<div class="excluded-list">';
-      excludedIds.forEach(function(id){
-        var w = WORDS_BY_ID[id];
-        if(!w) return;
-        html += '<div class="excluded-row"><span class="kr">' + esc(w.kr) + '</span>' +
-          '<span class="excluded-meaning">' + esc(w.meaning) + '</span>' +
-          '<button data-restore="' + esc(id) + '">Вернуть</button></div>';
-      });
-      html += '</div>';
-    }
-  }
-  html += '</div>';
-
   var pool = state.player.words || [];
   if(pool.length){
     var pct = Math.round((( (state.player.index % pool.length) +1)/pool.length)*100);
@@ -1601,6 +1581,27 @@ function renderSearchView(){
   var html = '<div class="qcard">';
   html += '<input type="text" id="search-input" class="search-input" placeholder="Введите слово на корейском или переводе..." value="' + esc(state.searchQuery) + '" autocomplete="off"/>';
   html += '</div>';
+
+  var excludedIds = Object.keys(state.excluded);
+  html += '<div class="panel"><div class="panel-row" id="excluded-toggle"><span class="label">Скрытые слова</span>' +
+    '<span class="value mono">' + excludedIds.length + '<span class="chev' + (state.excludedPanelOpen?' open':'') + '">▾</span></span></div>';
+  if(state.excludedPanelOpen){
+    if(!excludedIds.length){
+      html += '<div class="hint" style="padding:2px 2px 6px">Пока нет скрытых слов</div>';
+    } else {
+      html += '<div class="excluded-list">';
+      excludedIds.forEach(function(id){
+        var w = WORDS_BY_ID[id];
+        if(!w) return;
+        html += '<div class="excluded-row"><span class="kr">' + esc(w.kr) + '</span>' +
+          '<span class="excluded-meaning">' + esc(w.meaning) + '</span>' +
+          '<button data-restore="' + esc(id) + '">Вернуть</button></div>';
+      });
+      html += '</div>';
+    }
+  }
+  html += '</div>';
+
   if(!state.searchQuery.trim()){
     html += '<div class="empty"><b>Начните вводить</b>Ищет по корейскому слову, транслитерации и переводу</div>';
   } else {
