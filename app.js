@@ -351,6 +351,13 @@ function initState(){
     themeCounterMode: 'choice', // 'choice' | 'type' | 'translate' (только для счётных слов)
     themeSubOpen: false,
     searchQuery: '',
+    aiPanelOpen: false,
+    aiInput: '',
+    aiCategory: CATEGORIES[0],
+    aiLoading: false,
+    aiSaving: false,
+    aiError: '',
+    aiPreview: null, // {kr, translit, meaning, notes, examples}
     session: { phase: 'setup', size: 10, stageIdx: 0, stages: [], wordSet: [], results: {},
       mode: 'category', // 'lesson' | 'category'
       orderMode: 'sequential', // 'sequential' | 'mixed'
@@ -1605,6 +1612,52 @@ function renderQAView(){
   return html;
 }
 
+/* ============ ДОБАВЛЕНИЕ СЛОВ ЧЕРЕЗ AI ============ */
+var LLM_API_BASE = 'https://korean-flashcards-roan.vercel.app';
+var LLM_APP_SECRET = '37e366d6d1a1d586afd7d993b5d0910fed3cd21cc2ea88a2';
+async function llmRequest(path, body){
+  var res = await fetch(LLM_API_BASE + path, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json', 'X-App-Secret': LLM_APP_SECRET},
+    body: JSON.stringify(body)
+  });
+  var json = await res.json().catch(function(){ return {}; });
+  if(!res.ok) throw new Error(json.error || ('HTTP ' + res.status));
+  return json;
+}
+async function generateWordViaAI(){
+  var input = state.aiInput.trim();
+  if(!input){ state.aiError = 'Введите слово или значение'; render(); return; }
+  state.aiLoading = true; state.aiError = ''; state.aiPreview = null;
+  render();
+  try{
+    var word = await llmRequest('/api/generate-word', {input: input, category: state.aiCategory});
+    state.aiPreview = word;
+  }catch(e){
+    state.aiError = e.message || 'Не удалось сгенерировать слово';
+  }
+  state.aiLoading = false;
+  render();
+}
+async function confirmAddWord(){
+  if(!state.aiPreview) return;
+  state.aiSaving = true; state.aiError = '';
+  render();
+  try{
+    await llmRequest('/api/add-word', Object.assign({category: state.aiCategory}, state.aiPreview));
+    var group = RAW.filter(function(c){ return c.category === state.aiCategory; })[0];
+    if(group) group.words.push(state.aiPreview);
+    initData();
+    state.aiPreview = null;
+    state.aiInput = '';
+  }catch(e){
+    state.aiError = e.message || 'Не удалось сохранить слово';
+  }
+  state.aiSaving = false;
+  render();
+}
+function cancelAiPreview(){ state.aiPreview = null; state.aiError = ''; render(); }
+
 function searchWords(query){
   var q = query.trim().toLowerCase();
   if(!q) return [];
@@ -1656,6 +1709,34 @@ function renderSearchResultsBody(){
 function renderSearchView(){
   var html = '<div class="qcard">';
   html += '<input type="text" id="search-input" class="search-input" placeholder="Введите слово на корейском или переводе..." value="' + esc(state.searchQuery) + '" autocomplete="off"/>';
+  html += '</div>';
+
+  html += '<div class="panel" style="margin-top:14px"><div class="panel-row" id="ai-panel-toggle"><span class="label">Добавить слово через AI</span>' +
+    '<span class="value mono"><span class="chev' + (state.aiPanelOpen?' open':'') + '">▾</span></span></div>';
+  if(state.aiPanelOpen){
+    if(state.aiPreview){
+      var p = state.aiPreview;
+      html += '<div class="search-item" style="margin-top:2px">' +
+        '<div class="search-row"><span class="kr search-kr">' + esc(p.kr) + '</span><span class="translit mono">' + esc(p.translit) + '</span></div>' +
+        '<div class="search-meaning">' + esc(p.meaning) + '</div>' +
+        '<div class="search-cat mono">' + esc(state.aiCategory) + '</div>';
+      if(p.notes){ html += '<div class="notes" style="margin-top:6px">' + esc(p.notes) + '</div>'; }
+      if(p.examples && p.examples.length){ html += '<div class="notes" style="margin-top:6px"><b>Пример:</b> <span class="kr">' + esc(p.examples[0].kr) + '</span> — ' + esc(p.examples[0].ru) + '</div>'; }
+      html += '</div>';
+      if(state.aiError){ html += '<div class="feedback bad" style="margin-top:10px">' + esc(state.aiError) + '</div>'; }
+      html += '<div class="controls">' +
+        '<button class="btn btn-ghost" id="ai-cancel"' + (state.aiSaving?' disabled':'') + '>Отмена</button>' +
+        '<button class="btn btn-know" id="ai-confirm"' + (state.aiSaving?' disabled':'') + '>' + (state.aiSaving?'Сохраняю…':'Добавить в словарь') + '</button>' +
+        '</div>';
+    } else {
+      html += '<input type="text" id="ai-input" class="search-input" placeholder="Слово на корейском или значение по-русски" autocomplete="off" value="' + esc(state.aiInput) + '"' + (state.aiLoading?' disabled':'') + '/>';
+      html += '<select id="ai-category" class="search-input" style="margin-top:10px"' + (state.aiLoading?' disabled':'') + '>';
+      CATEGORIES.forEach(function(c){ html += '<option value="' + esc(c) + '"' + (c===state.aiCategory?' selected':'') + '>' + esc(c) + '</option>'; });
+      html += '</select>';
+      if(state.aiError){ html += '<div class="feedback bad" style="margin-top:10px">' + esc(state.aiError) + '</div>'; }
+      html += '<div class="controls"><button class="btn btn-know" id="ai-generate" style="width:100%"' + (state.aiLoading?' disabled':'') + '>' + (state.aiLoading?'Генерирую…':'Сгенерировать') + '</button></div>';
+    }
+  }
   html += '</div>';
 
   var excludedIds = Object.keys(state.excluded);
@@ -1875,6 +1956,18 @@ function attachHandlers(){
       if(body) body.innerHTML = renderSearchResultsBody();
     };
   }
+  var aiPanelToggle = document.getElementById('ai-panel-toggle');
+  if(aiPanelToggle) aiPanelToggle.onclick = function(){ state.aiPanelOpen = !state.aiPanelOpen; render(); };
+  var aiInput = document.getElementById('ai-input');
+  if(aiInput) aiInput.oninput = function(){ state.aiInput = aiInput.value; };
+  var aiCategory = document.getElementById('ai-category');
+  if(aiCategory) aiCategory.onchange = function(){ state.aiCategory = aiCategory.value; };
+  var aiGenerate = document.getElementById('ai-generate');
+  if(aiGenerate) aiGenerate.onclick = function(){ generateWordViaAI(); };
+  var aiConfirm = document.getElementById('ai-confirm');
+  if(aiConfirm) aiConfirm.onclick = function(){ confirmAddWord(); };
+  var aiCancel = document.getElementById('ai-cancel');
+  if(aiCancel) aiCancel.onclick = function(){ cancelAiPreview(); };
   document.querySelectorAll('[data-tap]').forEach(function(el){
     el.onclick = function(){ if(el.disabled) return; handleConstructTap(el.getAttribute('data-tap')); };
   });
