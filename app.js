@@ -200,6 +200,12 @@ function shuffle(arr){
 }
 function sample(arr, n){ return shuffle(arr).slice(0, n); }
 function esc(s){ var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+function mdRich(s){
+  var e = esc(s);
+  e = e.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  e = e.replace(/[가-힣ᄀ-ᇿ㄰-㆏]+/g, '<span class="kr-hl">$&</span>');
+  return e;
+}
 function resetIconBtn(id, title){ return '<div class="reset-row"><button class="btn-icon-sm" id="' + id + '" title="' + esc(title || 'Сбросить прогресс и перемешать') + '">\u21BB</button></div>'; }
 
 /* ============ QUESTION FACTORIES ============ */
@@ -334,6 +340,8 @@ function initState(){
     grammarCatOpen: false,
     grammarSelected: GRAMMAR_CATS.slice(),
     grammarSub: 'reference', // 'reference' | 'practice' | 'cards'
+    grammarRefView: 'topic', // 'topic' | 'lesson' (только для «Справочник»)
+    grammarExpanded: {}, // pattern -> true, раскрытые карточки в справочнике
     grammarCardMode: 'flip', // 'flip' | 'type' (только для «Карточки»)
     examSub: 'reading', // 'reading' | 'ordering' | 'construct' | 'cloze'
     examSubOpen: false,
@@ -1025,7 +1033,7 @@ function renderGrammarCard(q){
     '<div class="hint">нажмите, чтобы перевернуть</div></div>';
   out += '<div class="face back"><div class="taegeuk-edge"></div><div class="cat-tag mono" style="max-width:75%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + esc(item.lesson) + '</div>' +
     '<div class="meaning">' + esc(item.explanation) + '</div>' +
-    '<div class="notes"><b>Пример:</b> <span class="kr">' + esc(item.example.kr) + '</span> — ' + esc(item.example.ru) + '</div></div>';
+    '<div class="notes"><b>Пример:</b> <span class="kr">' + esc(item.examples[0].kr) + '</span> — ' + esc(item.examples[0].ru) + '</div></div>';
   out += '</div></div>';
   out += '<div class="controls"><button class="btn btn-know" id="gram-card-next" style="width:100%">Далее</button></div>';
   return out;
@@ -1035,13 +1043,13 @@ function renderGrammarSpell(q){
   var out = '<div class="qcard"><div class="taegeuk-edge"></div>';
   out += '<div class="q-translit mono" style="margin-bottom:2px">напишите конструкцию на корейском</div>';
   out += '<div class="meaning" style="font-size:16px">' + esc(item.explanation) + '</div>';
-  out += '<div class="notes"><b>Пример:</b> ' + esc(item.example.ru) + '</div>';
+  out += '<div class="notes"><b>Пример:</b> ' + esc(item.examples[0].ru) + '</div>';
   out += '<form class="type-row" id="type-form"><input class="kr" id="type-input" value="' + esc(state.ui.typedValue||'') + '" placeholder="한국어" autocomplete="off"' + (state.ui.typedResult?' disabled':'') + '/>' +
     '<button type="submit">' + (state.ui.typedResult ? 'Дальше' : 'Ответить') + '</button></form>';
   if(state.ui.typedResult){
     out += state.ui.typedResult === 'ok' ? '<div class="feedback ok">Верно!</div>' :
       ('<div class="feedback bad">Правильно: <span class="ans kr">' + esc(item.pattern) + '</span></div>');
-    out += '<div class="notes"><span class="kr">' + esc(item.example.kr) + '</span> — ' + esc(item.example.ru) + '</div>';
+    out += '<div class="notes"><span class="kr">' + esc(item.examples[0].kr) + '</span> — ' + esc(item.examples[0].ru) + '</div>';
   }
   out += '</div>';
   return out;
@@ -1346,6 +1354,32 @@ function renderWordsView(){
   return html;
 }
 
+function renderRefDetail(it){
+  var html = '<div class="ref-detail">';
+  html += '<div>' + mdRich(it.explanation) + '</div>';
+  if(it.usage && it.usage.length){
+    html += '<div class="rd-title">В каких случаях используется</div><ul>';
+    it.usage.forEach(function(u){ html += '<li>' + mdRich(u) + '</li>'; });
+    html += '</ul>';
+  }
+  if(it.rules && it.rules.length){
+    html += '<div class="rd-title">Правила грамматики</div><ul>';
+    it.rules.forEach(function(r){ html += '<li>' + mdRich(r) + '</li>'; });
+    html += '</ul>';
+  }
+  if(it.vocab && it.vocab.length){
+    html += '<div class="rd-title">Основные слова</div><table>';
+    it.vocab.forEach(function(v){ html += '<tr><td class="kr">' + esc(v.kr) + '</td><td>' + esc(v.ru) + '</td></tr>'; });
+    html += '</table>';
+  }
+  var examples = it.examples || (it.example ? [it.example] : []);
+  if(examples.length){
+    html += '<div class="rd-title">Примеры</div>';
+    examples.forEach(function(ex){ html += '<div class="rd-ex"><span class="kr">' + esc(ex.kr) + '</span> — ' + esc(ex.ru) + '</div>'; });
+  }
+  html += '</div>';
+  return html;
+}
 function renderGrammarReference(){
   var html = '<div class="panel"><div class="panel-row" id="gcat-toggle"><span class="label">Темы</span>' +
     '<span class="value mono">' + (state.grammarSelected.length===GRAMMAR_CATS.length ? 'все' : state.grammarSelected.length + ' из ' + GRAMMAR_CATS.length) +
@@ -1355,19 +1389,43 @@ function renderGrammarReference(){
   GRAMMAR_CATS.forEach(function(c){ html += '<div class="cat-chip" data-gcat="' + esc(c) + '" style="' + (state.grammarSelected.indexOf(c)!==-1?'':'opacity:.5') + '">' + esc(shortGrammarCat(c)) + '</div>'; });
   html += '</div></div>';
 
+  html += '<div class="sub-toggle" style="margin-bottom:14px">' +
+    '<button data-grefview="topic" class="' + (state.grammarRefView==='topic'?'active':'') + '">По темам</button>' +
+    '<button data-grefview="lesson" class="' + (state.grammarRefView==='lesson'?'active':'') + '">По урокам</button></div>';
+
   html += '<div class="qcard">';
-  GRAMMAR_TOPICS.forEach(function(topic){
-    if(state.grammarSelected.indexOf(topic.category) === -1) return;
-    html += '<div class="topic-header">' + esc(shortGrammarCat(topic.category)) + '</div>';
-    var lastGroup = null;
-    topic.items.forEach(function(it){
-      if(it.group && it.group !== lastGroup){ html += '<div class="ref-group">' + esc(it.group) + '</div>'; lastGroup = it.group; }
-      html += '<div class="ref-item"><div class="ref-pattern kr">' + esc(it.pattern) + '</div><div class="ref-desc">' + esc(it.desc) + '</div><div class="ref-lesson mono">' + esc(it.lesson) + '</div></div>';
+  function renderRow(it){
+    var open = !!state.grammarExpanded[it.pattern];
+    var out = '<div class="ref-item" data-refitem="' + esc(it.pattern) + '"><div class="ref-pattern kr">' + esc(it.pattern) + '</div><div class="ref-desc">' + esc(it.desc) + '</div><div class="ref-lesson mono">' + esc(it.lesson) + '</div></div>';
+    if(open) out += renderRefDetail(it);
+    return out;
+  }
+  if(state.grammarRefView === 'lesson'){
+    var byLesson = {};
+    GRAMMAR_TOPICS.forEach(function(topic){
+      if(state.grammarSelected.indexOf(topic.category) === -1) return;
+      topic.items.forEach(function(it){
+        (it.lessons || []).forEach(function(l){ (byLesson[l] = byLesson[l] || []).push(it); });
+      });
     });
-    if(topic.tips){
-      html += '<div class="tips-box">' + esc(topic.tips.replace(/\*\*/g,'')) + '</div>';
-    }
-  });
+    Object.keys(byLesson).map(Number).sort(function(a,b){ return a-b; }).forEach(function(l){
+      html += '<div class="topic-header">Урок ' + l + '</div>';
+      byLesson[l].forEach(function(it){ html += renderRow(it); });
+    });
+  } else {
+    GRAMMAR_TOPICS.forEach(function(topic){
+      if(state.grammarSelected.indexOf(topic.category) === -1) return;
+      html += '<div class="topic-header">' + esc(shortGrammarCat(topic.category)) + '</div>';
+      var lastGroup = null;
+      topic.items.forEach(function(it){
+        if(it.group && it.group !== lastGroup){ html += '<div class="ref-group">' + esc(it.group) + '</div>'; lastGroup = it.group; }
+        html += renderRow(it);
+      });
+      if(topic.tips){
+        html += '<div class="tips-box">' + esc(topic.tips.replace(/\*\*/g,'')) + '</div>';
+      }
+    });
+  }
   html += '</div>';
   return html;
 }
@@ -1688,6 +1746,16 @@ function attachHandlers(){
   }; });
   document.querySelectorAll('[data-gcardmode]').forEach(function(el){
     el.onclick = function(){ state.grammarCardMode = el.getAttribute('data-gcardmode'); rebuildGrammarCardsQuestion(); render(); };
+  });
+  document.querySelectorAll('[data-grefview]').forEach(function(el){
+    el.onclick = function(){ state.grammarRefView = el.getAttribute('data-grefview'); render(); };
+  });
+  document.querySelectorAll('[data-refitem]').forEach(function(el){
+    el.onclick = function(){
+      var p = el.getAttribute('data-refitem');
+      state.grammarExpanded[p] = !state.grammarExpanded[p];
+      render();
+    };
   });
 
   // words category filter

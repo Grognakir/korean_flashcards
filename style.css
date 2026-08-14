@@ -110,7 +110,7 @@ header{ display:flex; align-items:center; justify-content:space-between; margin-
 .btn-ghost{ background:none; border:1px solid var(--line); color:var(--ink-soft); }
 .btn-primary{ background:var(--ink); color:#fff; }
 
-.progress-bar{ height:5px; background:var(--paper-2); border-radius:6px; overflow:hidden; margin-bottom:16px; }
+.progress-bar{ height:5px; background:var(--paper-2); border-radius:3px; overflow:hidden; margin-bottom:22px; }
 .progress-fill{ height:100%; background:linear-gradient(90deg, var(--red), var(--blue)); transition:width .3s ease; }
 
 .empty{ text-align:center; padding:50px 20px; color:var(--stone); }
@@ -130,12 +130,22 @@ footer{ margin-top:26px; text-align:center; font-size:11px; color:var(--stone); 
 .summary-row{ display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--line); font-size:13.5px; }
 .summary-row:last-child{ border-bottom:none; }
 .summary-row .val{ font-weight:700; }
-.ref-item{ border-bottom:1px solid var(--line); padding:12px 0; }
+.ref-item{ border-bottom:1px solid var(--line); padding:12px 0; cursor:pointer; }
 .ref-item:last-child{ border-bottom:none; }
 .ref-pattern{ font-weight:800; font-size:17px; }
 .ref-desc{ font-size:13px; color:var(--ink-soft); margin-top:2px; }
 .ref-lesson{ font-size:10.5px; color:var(--stone); margin-top:3px; }
 .ref-group{ font-size:10.5px; text-transform:uppercase; letter-spacing:0.5px; color:var(--blue); margin-top:14px; margin-bottom:4px; }
+.kr-hl{ color:var(--blue); font-weight:600; }
+.ref-detail{ margin-top:10px; padding:12px 14px; background:var(--paper); border-radius:12px; font-size:13px; color:var(--ink-soft); line-height:1.55; }
+.ref-detail .rd-title{ font-size:10.5px; text-transform:uppercase; letter-spacing:0.5px; color:var(--stone); margin:10px 0 4px; }
+.ref-detail .rd-title:first-child{ margin-top:0; }
+.ref-detail ul{ margin:0; padding-left:18px; }
+.ref-detail li{ margin-bottom:4px; }
+.ref-detail table{ width:100%; border-collapse:collapse; font-size:12.5px; }
+.ref-detail td{ padding:3px 6px 3px 0; border-bottom:1px solid var(--line); }
+.ref-detail .rd-ex{ margin-bottom:6px; }
+.ref-detail .rd-ex .kr{ color:var(--ink); font-weight:600; }
 .tips-box{ margin-top:12px; background:var(--paper); border-radius:12px; padding:12px 14px; font-size:12.5px; color:var(--ink-soft); line-height:1.6; white-space:pre-line; }
 .topic-header{ font-weight:800; font-size:15px; margin:18px 0 4px; }
 .topic-header:first-child{ margin-top:0; }

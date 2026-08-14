@@ -4,8 +4,8 @@
     {
       "name": "korean-flashcards",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8811"],
-      "port": 8811
+      "runtimeArgs": ["-m", "http.server", "8837"],
+      "port": 8837
     }
   ]
 }
