@@ -1583,7 +1583,7 @@ function renderSearchView(){
   html += '</div>';
 
   var excludedIds = Object.keys(state.excluded);
-  html += '<div class="panel"><div class="panel-row" id="excluded-toggle"><span class="label">Скрытые слова</span>' +
+  html += '<div class="panel" style="margin-top:14px"><div class="panel-row" id="excluded-toggle"><span class="label">Скрытые слова</span>' +
     '<span class="value mono">' + excludedIds.length + '<span class="chev' + (state.excludedPanelOpen?' open':'') + '">▾</span></span></div>';
   if(state.excludedPanelOpen){
     if(!excludedIds.length){
