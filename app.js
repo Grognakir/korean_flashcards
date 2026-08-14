@@ -1637,6 +1637,22 @@ function renderSearchResult(w){
   out += '</div>';
   return out;
 }
+function renderSearchResultsBody(){
+  var html = '';
+  if(!state.searchQuery.trim()){
+    html += '<div class="empty"><b>Начните вводить</b>Ищет по корейскому слову, транслитерации и переводу</div>';
+  } else {
+    var results = searchWords(state.searchQuery);
+    if(!results.length){
+      html += '<div class="empty"><b>Ничего не найдено</b>Попробуйте другое слово</div>';
+    } else {
+      var shown = results.slice(0, 60);
+      html += '<div class="hint" style="margin:4px 0 10px">найдено: ' + results.length + (results.length > shown.length ? ' (показаны первые ' + shown.length + ')' : '') + '</div>';
+      shown.forEach(function(w){ html += renderSearchResult(w); });
+    }
+  }
+  return html;
+}
 function renderSearchView(){
   var html = '<div class="qcard">';
   html += '<input type="text" id="search-input" class="search-input" placeholder="Введите слово на корейском или переводе..." value="' + esc(state.searchQuery) + '" autocomplete="off"/>';
@@ -1662,18 +1678,7 @@ function renderSearchView(){
   }
   html += '</div>';
 
-  if(!state.searchQuery.trim()){
-    html += '<div class="empty"><b>Начните вводить</b>Ищет по корейскому слову, транслитерации и переводу</div>';
-  } else {
-    var results = searchWords(state.searchQuery);
-    if(!results.length){
-      html += '<div class="empty"><b>Ничего не найдено</b>Попробуйте другое слово</div>';
-    } else {
-      var shown = results.slice(0, 60);
-      html += '<div class="hint" style="margin:4px 0 10px">найдено: ' + results.length + (results.length > shown.length ? ' (показаны первые ' + shown.length + ')' : '') + '</div>';
-      shown.forEach(function(w){ html += renderSearchResult(w); });
-    }
-  }
+  html += '<div id="search-results-body">' + renderSearchResultsBody() + '</div>';
   return html;
 }
 
@@ -1864,15 +1869,10 @@ function attachHandlers(){
 
   var searchInput = document.getElementById('search-input');
   if(searchInput){
-    searchInput.addEventListener('compositionstart', function(){ state.searchComposing = true; });
-    searchInput.addEventListener('compositionend', function(){
-      state.searchComposing = false;
-      state.searchQuery = searchInput.value;
-      render();
-    });
     searchInput.oninput = function(){
       state.searchQuery = searchInput.value;
-      if(!state.searchComposing) render();
+      var body = document.getElementById('search-results-body');
+      if(body) body.innerHTML = renderSearchResultsBody();
     };
   }
   document.querySelectorAll('[data-tap]').forEach(function(el){
