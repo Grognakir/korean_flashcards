@@ -25,7 +25,7 @@ module.exports = async function handler(req, res) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const { category, kr, translit, meaning, notes, examples } = req.body || {};
+  const { category, kr, translit, meaning, notes, examples, newCategory } = req.body || {};
   if (!category || !kr || !translit || !meaning || !Array.isArray(examples) || examples.length === 0) {
     return res.status(400).json({ error: "Не хватает обязательных полей" });
   }
@@ -36,8 +36,12 @@ module.exports = async function handler(req, res) {
     const fileData = await getRes.json();
     const content = JSON.parse(Buffer.from(fileData.content, "base64").toString("utf-8"));
 
-    const group = content.find((c) => c.category === category);
-    if (!group) return res.status(400).json({ error: "Неизвестная категория: " + category });
+    let group = content.find((c) => c.category === category);
+    if (!group) {
+      if (!newCategory) return res.status(400).json({ error: "Неизвестная категория: " + category });
+      group = { category: category, words: [] };
+      content.push(group);
+    }
 
     group.words.push({
       kr: kr,

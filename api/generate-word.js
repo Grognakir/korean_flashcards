@@ -11,12 +11,20 @@ try {
 
 function buildSystemPrompt() {
   return "Ты помощник, который составляет карточки корейских слов для учебного приложения. " +
-    "На вход получаешь слово (на корейском или по-русски). Сначала сам определи, в какую из СУЩЕСТВУЮЩИХ " +
-    "категорий словаря оно лучше всего подходит — категория должна быть взята ДОСЛОВНО из этого списка, " +
-    "ничего не придумывай:\n" + CATEGORIES.map(function (c) { return "- " + c; }).join("\n") + "\n\n" +
+    "На вход получаешь слово (на корейском или по-русски). Вот существующие категории словаря:\n" +
+    CATEGORIES.map(function (c) { return "- " + c; }).join("\n") + "\n\n" +
+    "Сначала попробуй отнести слово к ОДНОЙ из категорий выше — название должно совпадать ДОСЛОВНО. " +
+    "Если слово по смыслу подходит к нескольким категориям, выбери одну — ту, к которой оно подходит БОЛЬШЕ ВСЕГО, " +
+    "не перечисляй несколько.\n" +
+    "Если ни одна существующая категория не подходит, придумай новую — короткое название в том же стиле, что и " +
+    "существующие (например по части речи: «Глаголы», «Прилагательные», «Наречия», либо по смысловой области: " +
+    "«Места», «Профессии»); в этом случае верни \"newCategory\": true. Если используешь существующую категорию — " +
+    "\"newCategory\": false.\n\n" +
     "Ответь СТРОГО валидным JSON-объектом, без markdown-разметки, без ```json, без пояснений до или после — " +
     "только сам объект. Формат:\n" +
-    '{"category": "одна из категорий выше, дословно", "kr": "слово на корейском (словарная форма)", ' +
+    '{"category": "название категории — существующее дословно, либо новое при newCategory: true", ' +
+    '"newCategory": true или false, ' +
+    '"kr": "слово на корейском (словарная форма)", ' +
     '"translit": "латиницей, упрощённая транслитерация", "meaning": "перевод на русский, кратко", ' +
     '"notes": "короткая заметка по употреблению или пустая строка", ' +
     '"examples": [{"kr": "пример-предложение на корейском", "ru": "перевод примера", "form": "форма слова в примере"}]}\n' +
@@ -81,7 +89,18 @@ function parseWordJSON(text) {
   if (!match) throw new Error("no JSON found in response");
   const obj = JSON.parse(match[0]);
   if (!obj.kr || !obj.translit || !obj.meaning) throw new Error("missing required fields");
-  if (!obj.category || CATEGORIES.indexOf(obj.category) === -1) throw new Error("invalid category: " + obj.category);
+  if (!obj.category || typeof obj.category !== "string" || !obj.category.trim()) throw new Error("missing category");
+  const existingCategory = CATEGORIES.filter(function (c) {
+    return c.trim().toLowerCase() === obj.category.trim().toLowerCase();
+  })[0];
+  if (existingCategory) {
+    obj.category = existingCategory;
+    obj.newCategory = false;
+  } else {
+    if (!obj.newCategory) throw new Error("invalid category: " + obj.category);
+    obj.category = obj.category.trim();
+    obj.newCategory = true;
+  }
   if (!Array.isArray(obj.examples) || obj.examples.length === 0) throw new Error("missing examples");
   for (const ex of obj.examples) {
     if (!ex.kr || !ex.ru) throw new Error("bad example");

@@ -1645,10 +1645,12 @@ async function confirmAddWord(){
   try{
     await llmRequest('/api/add-word', state.aiPreview);
     var group = RAW.filter(function(c){ return c.category === state.aiPreview.category; })[0];
-    if(group){
-      group.words.push({kr: state.aiPreview.kr, translit: state.aiPreview.translit, meaning: state.aiPreview.meaning,
-        notes: state.aiPreview.notes || '', related: null, examples: state.aiPreview.examples});
+    if(!group){
+      group = {category: state.aiPreview.category, words: []};
+      RAW.push(group);
     }
+    group.words.push({kr: state.aiPreview.kr, translit: state.aiPreview.translit, meaning: state.aiPreview.meaning,
+      notes: state.aiPreview.notes || '', related: null, examples: state.aiPreview.examples});
     initData();
     state.aiPreview = null;
     state.aiInput = '';
@@ -1721,7 +1723,7 @@ function renderSearchView(){
       html += '<div class="search-item" style="margin-top:14px">' +
         '<div class="search-row"><span class="kr search-kr">' + esc(p.kr) + '</span><span class="translit mono">' + esc(p.translit) + '</span></div>' +
         '<div class="search-meaning">' + esc(p.meaning) + '</div>' +
-        '<div class="search-cat mono">' + esc(shortCat(p.category)) + '</div>';
+        '<div class="search-cat mono">' + esc(shortCat(p.category)) + (p.newCategory ? ' · новая категория' : '') + '</div>';
       if(p.notes){ html += '<div class="notes" style="margin-top:6px">' + esc(p.notes) + '</div>'; }
       if(p.examples && p.examples.length){ html += '<div class="notes" style="margin-top:6px"><b>Пример:</b> <span class="kr">' + esc(p.examples[0].kr) + '</span> — ' + esc(p.examples[0].ru) + '</div>'; }
       html += '</div>';
