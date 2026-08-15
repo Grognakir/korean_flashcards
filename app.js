@@ -1736,6 +1736,11 @@ async function confirmAddWord(){
     group.words.push({kr: state.aiPreview.kr, translit: state.aiPreview.translit, meaning: state.aiPreview.meaning,
       notes: state.aiPreview.notes || '', related: null, examples: state.aiPreview.examples});
     initData();
+    if(state.aiPreview.newCategory){
+      if(state.wordsSelected.indexOf(state.aiPreview.category) === -1) state.wordsSelected.push(state.aiPreview.category);
+      if(state.session.catSelected.indexOf(state.aiPreview.category) === -1) state.session.catSelected.push(state.aiPreview.category);
+    }
+    resetWordsQueue();
     state.aiPreview = null;
     state.aiInput = '';
   }catch(e){
