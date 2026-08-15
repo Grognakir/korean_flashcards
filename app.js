@@ -1392,20 +1392,30 @@ function renderQuestionCard(q){
 
 /* ============ RENDER: VIEWS ============ */
 var NAV_ICONS = {
-  session: '<polygon points="7,4 19,12 7,20"/>',
-  words: '<rect x="3" y="7" width="13" height="14" rx="2"/><rect x="8" y="3" width="13" height="14" rx="2" fill="var(--paper)"/>',
+  practice: '<rect x="2" y="9" width="4" height="6" rx="1"/><rect x="18" y="9" width="4" height="6" rx="1"/><line x1="6" y1="12" x2="18" y2="12"/>',
+  vocab: '<rect x="3" y="7" width="13" height="14" rx="2"/><rect x="8" y="3" width="13" height="14" rx="2" fill="var(--paper)"/>',
   grammar: '<rect x="4" y="3" width="16" height="18" rx="2"/><line x1="7.5" y1="8" x2="16.5" y2="8"/><line x1="7.5" y1="12" x2="16.5" y2="12"/><line x1="7.5" y1="16" x2="13" y2="16"/>',
-  exam: '<rect x="4" y="3" width="16" height="18" rx="2"/><polyline points="8,12 11,15 16,8"/>',
-  qa: '<circle cx="12" cy="12" r="9"/><text x="12" y="16.5" text-anchor="middle" font-size="12" font-weight="800" fill="currentColor" stroke="none">?</text>',
-  theme: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
-  phrases: '<path d="M12 3C7 3 3 6.6 3 11c0 2.5 1.3 4.7 3.3 6.2L5 21l4.5-2.3c.8.2 1.6.3 2.5.3 5 0 9-3.6 9-8s-4-8-9-8z"/>',
   search: '<circle cx="10.5" cy="10.5" r="6.5"/><line x1="15.5" y1="15.5" x2="20" y2="20"/>'
 };
+var VIEW_GROUPS = {
+  practice: [['session','Сессия'],['exam','Экзамен'],['qa','Вопросы'],['theme','Темы']],
+  vocab: [['words','Слова'],['phrases','Фразы']],
+  grammar: [['grammar','Грамматика']],
+  search: [['search','Поиск']]
+};
+function groupOfView(view){
+  var found = 'practice';
+  Object.keys(VIEW_GROUPS).forEach(function(g){
+    if(VIEW_GROUPS[g].some(function(v){ return v[0]===view; })) found = g;
+  });
+  return found;
+}
 function renderTopNav(){
-  var tabs = [['session','Сессия'],['words','Слова'],['phrases','Фразы'],['grammar','Грамматика'],['exam','Экзамен'],['qa','Вопросы'],['theme','Темы'],['search','Поиск']];
+  var groups = [['practice','Практика'],['vocab','Словарь'],['grammar','Грамматика'],['search','Поиск']];
+  var activeGroup = groupOfView(state.view);
   var html = '<div class="top-nav">';
-  tabs.forEach(function(t){
-    html += '<button data-view="' + t[0] + '" class="' + (state.view===t[0]?'active':'') + '" title="' + t[1] + '" aria-label="' + t[1] + '">' +
+  groups.forEach(function(t){
+    html += '<button data-navgroup="' + t[0] + '" class="' + (activeGroup===t[0]?'active':'') + '" title="' + t[1] + '" aria-label="' + t[1] + '">' +
       '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' + NAV_ICONS[t[0]] + '</svg>' +
       '</button>';
   });
@@ -1942,6 +1952,15 @@ function render(){
   html += '<div class="stats-pill"><span class="dot" style="background:#4C7A5E"></span><b>' + s.known + '</b><span class="dot" style="background:#B4802A"></span><b>' + s.learning + '</b></div></header>';
   html += renderTopNav();
 
+  if(state.loaded){
+    var groupMembers = VIEW_GROUPS[groupOfView(state.view)];
+    if(groupMembers.length > 1){
+      html += '<div class="sub-toggle">';
+      groupMembers.forEach(function(v){ html += '<button data-view="' + v[0] + '" class="' + (state.view===v[0]?'active':'') + '">' + v[1] + '</button>'; });
+      html += '</div>';
+    }
+  }
+
   if(!state.loaded){ html += '<div class="qcard"><div class="empty">Загрузка…</div></div>'; }
   else if(state.view === 'session') html += renderSessionView();
   else if(state.view === 'words') html += renderWordsView();
@@ -1965,6 +1984,12 @@ function render(){
 function attachHandlers(){
   document.querySelectorAll('[data-view]').forEach(function(el){
     el.onclick = function(){ state.view = el.getAttribute('data-view'); render(); };
+  });
+  document.querySelectorAll('[data-navgroup]').forEach(function(el){
+    el.onclick = function(){
+      var g = el.getAttribute('data-navgroup');
+      if(groupOfView(state.view) !== g){ state.view = VIEW_GROUPS[g][0][0]; render(); }
+    };
   });
   var gsubs = document.querySelectorAll('[data-gsub]');
   gsubs.forEach(function(el){ el.onclick = function(){
