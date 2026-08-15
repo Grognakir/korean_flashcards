@@ -3,10 +3,11 @@
 "use strict";
 
 /* ============ DATA ============ */
-var RAW, GRAMMAR_TOPICS, GRAMMAR_EXERCISES, EXAM_DATA, QA_DATA, THEME_DATA;
+var RAW, GRAMMAR_TOPICS, GRAMMAR_EXERCISES, EXAM_DATA, QA_DATA, THEME_DATA, PHRASES_RAW;
 var EXAM_LABELS = ['가','나','다','라'];
 var ALL_WORDS, CATEGORIES, GRAMMAR_CATS, EX_CAT_MAP;
 var RELATED_BY_KR, WORDS_BY_ID;
+var ALL_PHRASES, PHRASE_CATEGORIES, PHRASES_BY_ID;
 
 function initData(){
   ALL_WORDS = [];
@@ -18,6 +19,15 @@ function initData(){
   CATEGORIES = RAW.map(function(c){ return c.category; });
   WORDS_BY_ID = {};
   ALL_WORDS.forEach(function(w){ WORDS_BY_ID[w.id] = w; });
+  ALL_PHRASES = [];
+  PHRASES_RAW.forEach(function(cat){
+    cat.phrases.forEach(function(p, pi){
+      ALL_PHRASES.push({ id: 'phrase::'+cat.category+'::'+pi+'::'+p.kr, category: cat.category, kr: p.kr, translit: p.translit, meaning: p.meaning, notes: p.notes || '' });
+    });
+  });
+  PHRASE_CATEGORIES = PHRASES_RAW.map(function(c){ return c.category; });
+  PHRASES_BY_ID = {};
+  ALL_PHRASES.forEach(function(p){ PHRASES_BY_ID[p.id] = p; });
   GRAMMAR_CATS = GRAMMAR_TOPICS.map(function(t){ return t.category; });
   EX_CAT_MAP = {};
   GRAMMAR_CATS.forEach(function(full){
@@ -209,21 +219,23 @@ function mdRich(s){
 function resetIconBtn(id, title){ return '<div class="reset-row"><button class="btn-icon-sm" id="' + id + '" title="' + esc(title || 'Сбросить прогресс и перемешать') + '">\u21BB</button></div>'; }
 
 /* ============ QUESTION FACTORIES ============ */
-function distractorMeanings(word, n){
-  var pool = ALL_WORDS.filter(function(w){ return w.id !== word.id && w.meaning !== word.meaning; });
-  return sample(pool, n).map(function(w){ return w.meaning; });
+function distractorMeanings(word, n, pool){
+  pool = pool || ALL_WORDS;
+  var p = pool.filter(function(w){ return w.id !== word.id && w.meaning !== word.meaning; });
+  return sample(p, n).map(function(w){ return w.meaning; });
 }
-function distractorWords(word, n){
-  var pool = ALL_WORDS.filter(function(w){ return w.id !== word.id && w.kr !== word.kr; });
-  return sample(pool, n);
+function distractorWords(word, n, pool){
+  pool = pool || ALL_WORDS;
+  var p = pool.filter(function(w){ return w.id !== word.id && w.kr !== word.kr; });
+  return sample(p, n);
 }
 function qCard(word){ return {type:'card', word:word}; }
-function qKr2Ru(word){
-  var opts = shuffle([word.meaning].concat(distractorMeanings(word, 4)));
+function qKr2Ru(word, pool){
+  var opts = shuffle([word.meaning].concat(distractorMeanings(word, 4, pool)));
   return {type:'kr2ru', word:word, options: opts};
 }
-function qRu2Kr(word){
-  var distractors = distractorWords(word, 4);
+function qRu2Kr(word, pool){
+  var distractors = distractorWords(word, 4, pool);
   var opts = shuffle([word].concat(distractors));
   return {type:'ru2kr', word:word, options: opts};
 }
@@ -336,7 +348,12 @@ function initState(){
     wordsSelected: CATEGORIES.slice(),
     wordsMode: 'cards',
     wordsModeOpen: false,
+    phrasesCatOpen: false,
+    phrasesSelected: PHRASE_CATEGORIES.slice(),
+    phrasesMode: 'cards',
+    phrasesModeOpen: false,
     excludedPanelOpen: false,
+    excludedPhPanelOpen: false,
     grammarCatOpen: false,
     grammarSelected: GRAMMAR_CATS.slice(),
     grammarSub: 'reference', // 'reference' | 'practice' | 'cards'
@@ -391,6 +408,16 @@ function purgeExcludedFromLiveQueues(id){
     state.player.words = filteredWords;
     state.player.index = filteredWords.length ? Math.max(0, state.player.index - removedBefore) : 0;
   }
+  if(state.player.phwords && state.player.phwords.length){
+    var removedBeforePh = 0;
+    var filteredPh = [];
+    state.player.phwords.forEach(function(w, i){
+      if(w.id === id){ if(i <= state.player.phindex) removedBeforePh++; }
+      else filteredPh.push(w);
+    });
+    state.player.phwords = filteredPh;
+    state.player.phindex = filteredPh.length ? Math.max(0, state.player.phindex - removedBeforePh) : 0;
+  }
   if(state.session.stages && state.session.stages.length){
     state.session.stages.forEach(function(st){
       var removedBefore = 0;
@@ -433,6 +460,7 @@ function loadProgress(){
   resetExamQueue();
   resetQAQueue();
   resetThemeQueue();
+  resetPhrasesQueue();
   render();
 }
 function saveProgress(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state.progress)); }catch(e){} }
@@ -476,6 +504,30 @@ function rebuildStandaloneQuestion(){
 function advanceStandalone(){
   state.player.index = (state.player.index + 1) % (state.player.words.length || 1);
   rebuildStandaloneQuestion();
+}
+
+/* ============ PHRASES STANDALONE QUEUE ============ */
+function resetPhrasesQueue(){
+  var filtered = ALL_PHRASES.filter(function(p){ return state.phrasesSelected.indexOf(p.category) !== -1 && !state.excluded[p.id]; });
+  state.player.phwords = shuffle(filtered);
+  state.player.phindex = 0;
+  state.ui = {};
+  rebuildPhrasesQuestion();
+}
+function rebuildPhrasesQuestion(){
+  var pool = state.player.phwords || [];
+  if(!pool.length){ state.player.phcurrent = null; return; }
+  var p = pool[state.player.phindex % pool.length];
+  var q;
+  if(state.phrasesMode === 'cards') q = qCard(p);
+  else if(state.phrasesMode === 'kr2ru') q = qKr2Ru(p, ALL_PHRASES);
+  else if(state.phrasesMode === 'ru2kr') q = qRu2Kr(p, ALL_PHRASES);
+  state.player.phcurrent = q;
+  state.ui = {};
+}
+function advancePhrasesStandalone(){
+  state.player.phindex = (state.player.phindex + 1) % (state.player.phwords.length || 1);
+  rebuildPhrasesQuestion();
 }
 
 /* ============ GRAMMAR STANDALONE QUEUE ============ */
@@ -803,6 +855,7 @@ function getActiveQuestion(){
   if(state.view === 'qa') return state.player.qacurrent;
   if(state.view === 'theme') return state.player.thcurrent;
   if(state.view === 'words') return state.player.current;
+  if(state.view === 'phrases') return state.player.phcurrent;
   return null;
 }
 function goNextAfterAnswer(){
@@ -812,6 +865,7 @@ function goNextAfterAnswer(){
   else if(state.view === 'exam') { advanceExam(); render(); }
   else if(state.view === 'qa') { advanceQA(); render(); }
   else if(state.view === 'theme') { advanceTheme(); render(); }
+  else if(state.view === 'phrases') { advancePhrasesStandalone(); render(); }
   else { advanceStandalone(); render(); }
 }
 function handleCardRate(status){
@@ -828,6 +882,7 @@ function handleExcludeWord(){
   excludeWord(q.word.id);
   state.ui = {};
   if(state.view === 'words') rebuildStandaloneQuestion();
+  else if(state.view === 'phrases') rebuildPhrasesQuestion();
   render();
 }
 function handleChoice(optValue){
@@ -1318,10 +1373,11 @@ var NAV_ICONS = {
   exam: '<rect x="4" y="3" width="16" height="18" rx="2"/><polyline points="8,12 11,15 16,8"/>',
   qa: '<circle cx="12" cy="12" r="9"/><text x="12" y="16.5" text-anchor="middle" font-size="12" font-weight="800" fill="currentColor" stroke="none">?</text>',
   theme: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+  phrases: '<path d="M12 3C7 3 3 6.6 3 11c0 2.5 1.3 4.7 3.3 6.2L5 21l4.5-2.3c.8.2 1.6.3 2.5.3 5 0 9-3.6 9-8s-4-8-9-8z"/>',
   search: '<circle cx="10.5" cy="10.5" r="6.5"/><line x1="15.5" y1="15.5" x2="20" y2="20"/>'
 };
 function renderTopNav(){
-  var tabs = [['session','Сессия'],['words','Слова'],['grammar','Грамматика'],['exam','Экзамен'],['qa','Вопросы'],['theme','Темы'],['search','Поиск']];
+  var tabs = [['session','Сессия'],['words','Слова'],['phrases','Фразы'],['grammar','Грамматика'],['exam','Экзамен'],['qa','Вопросы'],['theme','Темы'],['search','Поиск']];
   var html = '<div class="top-nav">';
   tabs.forEach(function(t){
     html += '<button data-view="' + t[0] + '" class="' + (state.view===t[0]?'active':'') + '" title="' + t[1] + '" aria-label="' + t[1] + '">' +
@@ -1357,6 +1413,34 @@ function renderWordsView(){
   }
   html += renderQuestionCard(state.player.current);
   html += resetIconBtn('reshuffle-words');
+  return html;
+}
+
+function renderPhrasesView(){
+  var html = '';
+  html += '<div class="panel"><div class="panel-row" id="phcat-toggle"><span class="label">Ситуации</span>' +
+    '<span class="value mono">' + (state.phrasesSelected.length===PHRASE_CATEGORIES.length ? 'все' : state.phrasesSelected.length + ' из ' + PHRASE_CATEGORIES.length) +
+    '<span class="chev' + (state.phrasesCatOpen?' open':'') + '">▾</span></span></div>';
+  html += '<div class="cat-actions' + (state.phrasesCatOpen?' open':'') + '"><button id="phcat-all">Выбрать все</button><button id="phcat-none">Снять все</button></div>';
+  html += '<div class="cat-grid' + (state.phrasesCatOpen?' open':'') + '">';
+  PHRASE_CATEGORIES.forEach(function(c){ html += '<div class="cat-chip' + (state.phrasesSelected.indexOf(c)!==-1?' active':'') + '" data-phcat="' + esc(c) + '">' + esc(shortCat(c)) + '</div>'; });
+  html += '</div></div>';
+
+  var modes = [['cards','Карточки'],['kr2ru','Фраза→Перевод'],['ru2kr','Перевод→Фраза']];
+  var currentModeLabel = (modes.filter(function(m){ return m[0]===state.phrasesMode; })[0] || modes[0])[1];
+  html += '<div class="panel"><div class="panel-row" id="phmode-toggle"><span class="label">Упражнение</span>' +
+    '<span class="value mono">' + esc(currentModeLabel) + '<span class="chev' + (state.phrasesModeOpen?' open':'') + '">▾</span></span></div>';
+  html += '<div class="cat-grid' + (state.phrasesModeOpen?' open':'') + '">';
+  modes.forEach(function(m){ html += '<div class="cat-chip' + (state.phrasesMode===m[0]?' active':'') + '" data-phmode="' + m[0] + '">' + m[1] + '</div>'; });
+  html += '</div></div>';
+
+  var pool = state.player.phwords || [];
+  if(pool.length){
+    var pct = Math.round((( (state.player.phindex % pool.length) +1)/pool.length)*100);
+    html += '<div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%"></div></div>';
+  }
+  html += renderQuestionCard(state.player.phcurrent);
+  html += resetIconBtn('reshuffle-phrases');
   return html;
 }
 
@@ -1740,19 +1824,39 @@ function renderSearchView(){
   }
   html += '</div>';
 
-  var excludedIds = Object.keys(state.excluded);
+  var excludedWordIds = Object.keys(state.excluded).filter(function(id){ return WORDS_BY_ID[id]; });
   html += '<div class="panel" style="margin-top:14px"><div class="panel-row" id="excluded-toggle"><span class="label">Скрытые слова</span>' +
-    '<span class="value mono">' + excludedIds.length + '<span class="chev' + (state.excludedPanelOpen?' open':'') + '">▾</span></span></div>';
+    '<span class="value mono">' + excludedWordIds.length + '<span class="chev' + (state.excludedPanelOpen?' open':'') + '">▾</span></span></div>';
   if(state.excludedPanelOpen){
-    if(!excludedIds.length){
+    if(!excludedWordIds.length){
       html += '<div class="hint" style="padding:2px 2px 6px">Пока нет скрытых слов</div>';
     } else {
       html += '<div class="excluded-list">';
-      excludedIds.forEach(function(id){
+      excludedWordIds.forEach(function(id){
         var w = WORDS_BY_ID[id];
         if(!w) return;
         html += '<div class="excluded-row"><span class="kr">' + esc(w.kr) + '</span>' +
           '<span class="excluded-meaning">' + esc(w.meaning) + '</span>' +
+          '<button data-restore="' + esc(id) + '">Вернуть</button></div>';
+      });
+      html += '</div>';
+    }
+  }
+  html += '</div>';
+
+  var excludedPhraseIds = Object.keys(state.excluded).filter(function(id){ return PHRASES_BY_ID[id]; });
+  html += '<div class="panel" style="margin-top:14px"><div class="panel-row" id="excluded-ph-toggle"><span class="label">Скрытые фразы</span>' +
+    '<span class="value mono">' + excludedPhraseIds.length + '<span class="chev' + (state.excludedPhPanelOpen?' open':'') + '">▾</span></span></div>';
+  if(state.excludedPhPanelOpen){
+    if(!excludedPhraseIds.length){
+      html += '<div class="hint" style="padding:2px 2px 6px">Пока нет скрытых фраз</div>';
+    } else {
+      html += '<div class="excluded-list">';
+      excludedPhraseIds.forEach(function(id){
+        var p = PHRASES_BY_ID[id];
+        if(!p) return;
+        html += '<div class="excluded-row"><span class="kr">' + esc(p.kr) + '</span>' +
+          '<span class="excluded-meaning">' + esc(p.meaning) + '</span>' +
           '<button data-restore="' + esc(id) + '">Вернуть</button></div>';
       });
       html += '</div>';
@@ -1804,6 +1908,7 @@ function render(){
   if(!state.loaded){ html += '<div class="qcard"><div class="empty">Загрузка…</div></div>'; }
   else if(state.view === 'session') html += renderSessionView();
   else if(state.view === 'words') html += renderWordsView();
+  else if(state.view === 'phrases') html += renderPhrasesView();
   else if(state.view === 'grammar') html += renderGrammarView();
   else if(state.view === 'exam') html += renderExamView();
   else if(state.view === 'qa') html += renderQAView();
@@ -1864,10 +1969,13 @@ function attachHandlers(){
   if(wmodeToggle) wmodeToggle.onclick = function(){ state.wordsModeOpen = !state.wordsModeOpen; render(); };
   var excludedToggle = document.getElementById('excluded-toggle');
   if(excludedToggle) excludedToggle.onclick = function(){ state.excludedPanelOpen = !state.excludedPanelOpen; render(); };
+  var excludedPhToggle = document.getElementById('excluded-ph-toggle');
+  if(excludedPhToggle) excludedPhToggle.onclick = function(){ state.excludedPhPanelOpen = !state.excludedPhPanelOpen; render(); };
   document.querySelectorAll('[data-restore]').forEach(function(el){
     el.onclick = function(){
       restoreWord(el.getAttribute('data-restore'));
       resetWordsQueue();
+      resetPhrasesQueue();
       render();
     };
   });
@@ -1886,6 +1994,41 @@ function attachHandlers(){
     scoped.forEach(function(w){ delete state.progress[w.id]; });
     saveProgress();
     resetWordsQueue();
+    render();
+  };
+
+  // phrases category filter
+  var phcatToggle = document.getElementById('phcat-toggle');
+  if(phcatToggle) phcatToggle.onclick = function(){ state.phrasesCatOpen = !state.phrasesCatOpen; render(); };
+  var phcatAll = document.getElementById('phcat-all');
+  if(phcatAll) phcatAll.onclick = function(){ state.phrasesSelected = PHRASE_CATEGORIES.slice(); resetPhrasesQueue(); render(); };
+  var phcatNone = document.getElementById('phcat-none');
+  if(phcatNone) phcatNone.onclick = function(){ state.phrasesSelected = []; resetPhrasesQueue(); render(); };
+  document.querySelectorAll('.cat-chip[data-phcat]').forEach(function(el){
+    el.onclick = function(){
+      var c = el.getAttribute('data-phcat');
+      var i = state.phrasesSelected.indexOf(c);
+      if(i === -1) state.phrasesSelected.push(c); else state.phrasesSelected.splice(i,1);
+      resetPhrasesQueue(); render();
+    };
+  });
+  var phmodeToggle = document.getElementById('phmode-toggle');
+  if(phmodeToggle) phmodeToggle.onclick = function(){ state.phrasesModeOpen = !state.phrasesModeOpen; render(); };
+  document.querySelectorAll('.cat-chip[data-phmode]').forEach(function(el){
+    el.onclick = function(){
+      state.phrasesMode = el.getAttribute('data-phmode');
+      state.phrasesModeOpen = false;
+      state.player.phindex = 0;
+      rebuildPhrasesQuestion();
+      render();
+    };
+  });
+  var reshufflePh = document.getElementById('reshuffle-phrases');
+  if(reshufflePh) reshufflePh.onclick = function(){
+    var scoped = ALL_PHRASES.filter(function(p){ return state.phrasesSelected.indexOf(p.category) !== -1; });
+    scoped.forEach(function(p){ delete state.progress[p.id]; });
+    saveProgress();
+    resetPhrasesQueue();
     render();
   };
 
@@ -2051,12 +2194,12 @@ function attachHandlers(){
 
 async function boot(){
   var files = ['data/words.json','data/grammar.json','data/grammar-exercises.json',
-               'data/exam.json','data/qa.json','data/theme.json'];
+               'data/exam.json','data/qa.json','data/theme.json','data/phrases.json'];
   var results = await Promise.all(files.map(function(f){
     return fetch(f).then(function(r){ return r.json(); });
   }));
   RAW = results[0]; GRAMMAR_TOPICS = results[1]; GRAMMAR_EXERCISES = results[2];
-  EXAM_DATA = results[3]; QA_DATA = results[4]; THEME_DATA = results[5];
+  EXAM_DATA = results[3]; QA_DATA = results[4]; THEME_DATA = results[5]; PHRASES_RAW = results[6];
   initData();
   initState();
   loadProgress();
