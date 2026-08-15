@@ -352,9 +352,7 @@ function initState(){
     themeSubOpen: false,
     searchQuery: '',
     aiPanelOpen: false,
-    aiCategoryOpen: false,
     aiInput: '',
-    aiCategory: CATEGORIES[0],
     aiLoading: false,
     aiSaving: false,
     aiError: '',
@@ -1632,7 +1630,7 @@ async function generateWordViaAI(){
   state.aiLoading = true; state.aiError = ''; state.aiPreview = null;
   render();
   try{
-    var word = await llmRequest('/api/generate-word', {input: input, category: state.aiCategory});
+    var word = await llmRequest('/api/generate-word', {input: input});
     state.aiPreview = word;
   }catch(e){
     state.aiError = e.message || 'Не удалось сгенерировать слово';
@@ -1645,9 +1643,12 @@ async function confirmAddWord(){
   state.aiSaving = true; state.aiError = '';
   render();
   try{
-    await llmRequest('/api/add-word', Object.assign({category: state.aiCategory}, state.aiPreview));
-    var group = RAW.filter(function(c){ return c.category === state.aiCategory; })[0];
-    if(group) group.words.push(state.aiPreview);
+    await llmRequest('/api/add-word', state.aiPreview);
+    var group = RAW.filter(function(c){ return c.category === state.aiPreview.category; })[0];
+    if(group){
+      group.words.push({kr: state.aiPreview.kr, translit: state.aiPreview.translit, meaning: state.aiPreview.meaning,
+        notes: state.aiPreview.notes || '', related: null, examples: state.aiPreview.examples});
+    }
     initData();
     state.aiPreview = null;
     state.aiInput = '';
@@ -1720,7 +1721,7 @@ function renderSearchView(){
       html += '<div class="search-item" style="margin-top:14px">' +
         '<div class="search-row"><span class="kr search-kr">' + esc(p.kr) + '</span><span class="translit mono">' + esc(p.translit) + '</span></div>' +
         '<div class="search-meaning">' + esc(p.meaning) + '</div>' +
-        '<div class="search-cat mono">' + esc(state.aiCategory) + '</div>';
+        '<div class="search-cat mono">' + esc(shortCat(p.category)) + '</div>';
       if(p.notes){ html += '<div class="notes" style="margin-top:6px">' + esc(p.notes) + '</div>'; }
       if(p.examples && p.examples.length){ html += '<div class="notes" style="margin-top:6px"><b>Пример:</b> <span class="kr">' + esc(p.examples[0].kr) + '</span> — ' + esc(p.examples[0].ru) + '</div>'; }
       html += '</div>';
@@ -1731,11 +1732,6 @@ function renderSearchView(){
         '</div>';
     } else {
       html += '<input type="text" id="ai-input" class="search-input" style="margin-top:14px" placeholder="Слово на корейском или значение по-русски" autocomplete="off" value="' + esc(state.aiInput) + '"' + (state.aiLoading?' disabled':'') + '/>';
-      html += '<div class="panel-row" id="ai-category-toggle" style="margin-top:14px"><span class="label">Категория</span>' +
-        '<span class="value mono">' + esc(shortCat(state.aiCategory)) + '<span class="chev' + (state.aiCategoryOpen?' open':'') + '">▾</span></span></div>';
-      html += '<div class="cat-grid' + (state.aiCategoryOpen?' open':'') + '">';
-      CATEGORIES.forEach(function(c){ html += '<div class="cat-chip' + (c===state.aiCategory?' active':'') + '" data-aicat="' + esc(c) + '">' + esc(shortCat(c)) + '</div>'; });
-      html += '</div>';
       if(state.aiError){ html += '<div class="feedback bad">' + esc(state.aiError) + '</div>'; }
       html += '<div class="controls"><button class="btn btn-know" id="ai-generate" style="width:100%"' + (state.aiLoading?' disabled':'') + '>' + (state.aiLoading?'Генерирую…':'Сгенерировать') + '</button></div>';
     }
@@ -1963,15 +1959,6 @@ function attachHandlers(){
   if(aiPanelToggle) aiPanelToggle.onclick = function(){ state.aiPanelOpen = !state.aiPanelOpen; render(); };
   var aiInput = document.getElementById('ai-input');
   if(aiInput) aiInput.oninput = function(){ state.aiInput = aiInput.value; };
-  var aiCategoryToggle = document.getElementById('ai-category-toggle');
-  if(aiCategoryToggle) aiCategoryToggle.onclick = function(){ state.aiCategoryOpen = !state.aiCategoryOpen; render(); };
-  document.querySelectorAll('.cat-chip[data-aicat]').forEach(function(el){
-    el.onclick = function(){
-      state.aiCategory = el.getAttribute('data-aicat');
-      state.aiCategoryOpen = false;
-      render();
-    };
-  });
   var aiGenerate = document.getElementById('ai-generate');
   if(aiGenerate) aiGenerate.onclick = function(){ generateWordViaAI(); };
   var aiConfirm = document.getElementById('ai-confirm');

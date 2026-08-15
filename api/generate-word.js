@@ -1,14 +1,30 @@
-const SYSTEM_PROMPT = "Ты помощник, который составляет карточки корейских слов для учебного приложения. " +
-  "На вход получаешь слово (на корейском или по-русски) и категорию словаря, в которую оно должно попасть. " +
-  "Ответь СТРОГО валидным JSON-объектом, без markdown-разметки, без ```json, без пояснений до или после — " +
-  "только сам объект. Формат:\n" +
-  '{"kr": "слово на корейском (словарная форма)", "translit": "латиницей, упрощённая транслитерация", ' +
-  '"meaning": "перевод на русский, кратко", "notes": "короткая заметка по употреблению или пустая строка", ' +
-  '"examples": [{"kr": "пример-предложение на корейском", "ru": "перевод примера", "form": "форма слова в примере"}]}\n' +
-  "В examples — минимум один пример, реалистичное простое предложение уровня TOPIK I.";
+const fs = require("fs");
+const path = require("path");
 
-function buildUserPrompt(input, category) {
-  return "Категория словаря: " + category + "\nСлово или значение: " + input;
+var CATEGORIES = [];
+try {
+  var wordsRaw = fs.readFileSync(path.join(process.cwd(), "data/words.json"), "utf-8");
+  CATEGORIES = JSON.parse(wordsRaw).map(function (c) { return c.category; });
+} catch (e) {
+  console.warn("could not read data/words.json for category list:", e.message);
+}
+
+function buildSystemPrompt() {
+  return "Ты помощник, который составляет карточки корейских слов для учебного приложения. " +
+    "На вход получаешь слово (на корейском или по-русски). Сначала сам определи, в какую из СУЩЕСТВУЮЩИХ " +
+    "категорий словаря оно лучше всего подходит — категория должна быть взята ДОСЛОВНО из этого списка, " +
+    "ничего не придумывай:\n" + CATEGORIES.map(function (c) { return "- " + c; }).join("\n") + "\n\n" +
+    "Ответь СТРОГО валидным JSON-объектом, без markdown-разметки, без ```json, без пояснений до или после — " +
+    "только сам объект. Формат:\n" +
+    '{"category": "одна из категорий выше, дословно", "kr": "слово на корейском (словарная форма)", ' +
+    '"translit": "латиницей, упрощённая транслитерация", "meaning": "перевод на русский, кратко", ' +
+    '"notes": "короткая заметка по употреблению или пустая строка", ' +
+    '"examples": [{"kr": "пример-предложение на корейском", "ru": "перевод примера", "form": "форма слова в примере"}]}\n' +
+    "В examples — минимум один пример, реалистичное простое предложение уровня TOPIK I.";
+}
+
+function buildUserPrompt(input) {
+  return "Слово или значение: " + input;
 }
 
 async function callGemini(systemPrompt, userPrompt) {
@@ -65,6 +81,7 @@ function parseWordJSON(text) {
   if (!match) throw new Error("no JSON found in response");
   const obj = JSON.parse(match[0]);
   if (!obj.kr || !obj.translit || !obj.meaning) throw new Error("missing required fields");
+  if (!obj.category || CATEGORIES.indexOf(obj.category) === -1) throw new Error("invalid category: " + obj.category);
   if (!Array.isArray(obj.examples) || obj.examples.length === 0) throw new Error("missing examples");
   for (const ex of obj.examples) {
     if (!ex.kr || !ex.ru) throw new Error("bad example");
@@ -82,14 +99,16 @@ module.exports = async function handler(req, res) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
-  const { input, category } = req.body || {};
-  if (!input || !category) return res.status(400).json({ error: "input и category обязательны" });
+  const { input } = req.body || {};
+  if (!input) return res.status(400).json({ error: "input обязателен" });
+  if (!CATEGORIES.length) return res.status(500).json({ error: "Список категорий не загружен на сервере" });
 
-  const userPrompt = buildUserPrompt(input, category);
+  const systemPrompt = buildSystemPrompt();
+  const userPrompt = buildUserPrompt(input);
   let lastError = null;
   for (const call of PROVIDERS) {
     try {
-      const text = await call(SYSTEM_PROMPT, userPrompt);
+      const text = await call(systemPrompt, userPrompt);
       const word = parseWordJSON(text);
       return res.status(200).json(word);
     } catch (e) {
