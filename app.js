@@ -359,6 +359,8 @@ function initState(){
     grammarSub: 'reference', // 'reference' | 'practice' | 'cards'
     grammarRefView: 'topic', // 'topic' | 'lesson' (только для «Справочник»)
     grammarExpanded: {}, // pattern -> true, раскрытые карточки в справочнике
+    grammarTopicOpen: {}, // category -> true, раскрытые темы в справочнике
+    grammarLessonOpen: {}, // lesson number -> true, раскрытые уроки в справочнике
     grammarCardMode: 'flip', // 'flip' | 'type' (только для «Карточки»)
     examSub: 'reading', // 'reading' | 'ordering' | 'construct' | 'cloze'
     examSubOpen: false,
@@ -1499,20 +1501,26 @@ function renderGrammarReference(){
       });
     });
     Object.keys(byLesson).map(Number).sort(function(a,b){ return a-b; }).forEach(function(l){
-      html += '<div class="topic-header">Урок ' + l + '</div>';
-      byLesson[l].forEach(function(it){ html += renderRow(it); });
+      var lessonOpen = !!state.grammarLessonOpen[l];
+      html += '<div class="topic-header" data-lessontoggle="' + l + '"><span>Урок ' + l + '</span><span class="chev' + (lessonOpen?' open':'') + '">▾</span></div>';
+      if(lessonOpen){
+        byLesson[l].forEach(function(it){ html += renderRow(it); });
+      }
     });
   } else {
     GRAMMAR_TOPICS.forEach(function(topic){
       if(state.grammarSelected.indexOf(topic.category) === -1) return;
-      html += '<div class="topic-header">' + esc(shortGrammarCat(topic.category)) + '</div>';
-      var lastGroup = null;
-      topic.items.forEach(function(it){
-        if(it.group && it.group !== lastGroup){ html += '<div class="ref-group">' + esc(it.group) + '</div>'; lastGroup = it.group; }
-        html += renderRow(it);
-      });
-      if(topic.tips){
-        html += '<div class="tips-box">' + esc(topic.tips.replace(/\*\*/g,'')) + '</div>';
+      var topicOpen = !!state.grammarTopicOpen[topic.category];
+      html += '<div class="topic-header" data-topictoggle="' + esc(topic.category) + '"><span>' + esc(shortGrammarCat(topic.category)) + '</span><span class="chev' + (topicOpen?' open':'') + '">▾</span></div>';
+      if(topicOpen){
+        var lastGroup = null;
+        topic.items.forEach(function(it){
+          if(it.group && it.group !== lastGroup){ html += '<div class="ref-group">' + esc(it.group) + '</div>'; lastGroup = it.group; }
+          html += renderRow(it);
+        });
+        if(topic.tips){
+          html += '<div class="tips-box">' + esc(topic.tips.replace(/\*\*/g,'')) + '</div>';
+        }
       }
     });
   }
@@ -1951,6 +1959,20 @@ function attachHandlers(){
     el.onclick = function(){
       var p = el.getAttribute('data-refitem');
       state.grammarExpanded[p] = !state.grammarExpanded[p];
+      render();
+    };
+  });
+  document.querySelectorAll('[data-topictoggle]').forEach(function(el){
+    el.onclick = function(){
+      var c = el.getAttribute('data-topictoggle');
+      state.grammarTopicOpen[c] = !state.grammarTopicOpen[c];
+      render();
+    };
+  });
+  document.querySelectorAll('[data-lessontoggle]').forEach(function(el){
+    el.onclick = function(){
+      var l = el.getAttribute('data-lessontoggle');
+      state.grammarLessonOpen[l] = !state.grammarLessonOpen[l];
       render();
     };
   });

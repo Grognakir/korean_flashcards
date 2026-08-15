@@ -147,7 +147,7 @@ footer{ margin-top:26px; text-align:center; font-size:11px; color:var(--stone); 
 .ref-detail .rd-ex{ margin-bottom:6px; }
 .ref-detail .rd-ex .kr{ color:var(--ink); font-weight:600; }
 .tips-box{ margin-top:12px; background:var(--paper); border-radius:12px; padding:12px 14px; font-size:12.5px; color:var(--ink-soft); line-height:1.6; white-space:pre-line; }
-.topic-header{ font-weight:800; font-size:15px; margin:18px 0 4px; }
+.topic-header{ font-weight:800; font-size:15px; margin:18px 0 4px; display:flex; align-items:center; justify-content:space-between; cursor:pointer; }
 .topic-header:first-child{ margin-top:0; }
 .search-input{
   width:100%; padding:13px 16px; border-radius:14px; border:1.5px solid var(--line);
