@@ -527,9 +527,82 @@ function initState(){
       catSelected: CATEGORIES.slice(), catOpen: false },
     mockExam: { phase: 'pick', examKey: null, queue: [], index: 0,
       listeningCorrect: 0, listeningTotal: 0, readingCorrect: 0, readingTotal: 0 },
+    retry: { steps: {}, pending: {}, active: {} },
     player: { queue: [], index: 0, mockcurrent: null },
     ui: {} // ephemeral per-question ui state (flipped, chosen, typedValue, typedResult)
   };
+}
+
+var RETRY_SPACING = 5;
+function clearRetryContext(context){
+  if(!state.retry) state.retry = {steps:{}, pending:{}, active:{}};
+  state.retry.steps[context] = 0;
+  state.retry.pending[context] = [];
+  delete state.retry.active[context];
+}
+function retryQuestionKey(q){
+  if(q.word) return q.type + ':word:' + (q.word.id || q.word.kr);
+  if(q.ex) return q.type + ':exercise:' + (q.ex.id || q.ex.pattern);
+  if(q.item) return q.type + ':item:' + (q.item.id || q.item.pattern || q.item.correct);
+  return q.type;
+}
+function retryContextForState(){
+  if(state.view === 'session') return state.session.orderMode === 'mixed' ? null : 'session';
+  if(state.view === 'grammar' && state.grammarSub === 'practice') return 'grammar';
+  if(state.view === 'grammar' && state.grammarSub === 'cards') return 'gramcards';
+  if(state.view === 'qa') return 'qa';
+  if(state.view === 'theme') return 'theme';
+  if(state.view === 'words') return 'words';
+  if(state.view === 'phrases') return 'phrases';
+  return null;
+}
+function recordPracticeAnswer(q, isCorrect){
+  var context = retryContextForState();
+  if(!context || !q) return;
+  var key = retryQuestionKey(q);
+  var pending = state.retry.pending[context] || (state.retry.pending[context] = []);
+  if(isCorrect){
+    state.retry.pending[context] = pending.filter(function(entry){ return entry.key !== key; });
+    return;
+  }
+  var due = (state.retry.steps[context] || 0) + RETRY_SPACING + 1;
+  var existing = pending.filter(function(entry){ return entry.key === key; })[0];
+  if(existing){ existing.due = Math.min(existing.due, due); }
+  else pending.push({key:key, due:due, question:q});
+}
+function takeDueRetry(context){
+  var active = state.retry.active[context];
+  if(active) return active.question;
+  var pending = state.retry.pending[context] || [];
+  var step = state.retry.steps[context] || 0;
+  var index = -1;
+  for(var i=0;i<pending.length;i++){
+    if(pending[i].due <= step){ index = i; break; }
+  }
+  if(index === -1) return null;
+  active = pending.splice(index, 1)[0];
+  state.retry.active[context] = active;
+  return active.question;
+}
+function finishRetryTurn(context){
+  var wasRetry = !!state.retry.active[context];
+  delete state.retry.active[context];
+  state.retry.steps[context] = (state.retry.steps[context] || 0) + 1;
+  return wasRetry;
+}
+function hasPendingRetries(context){ return !!((state.retry.pending[context] || []).length); }
+function makeRetriesDue(context){
+  var step = state.retry.steps[context] || 0;
+  (state.retry.pending[context] || []).forEach(function(entry){ entry.due = step; });
+}
+function cancelRetriesForWord(id){
+  ['words','phrases','session'].forEach(function(context){
+    state.retry.pending[context] = (state.retry.pending[context] || []).filter(function(entry){
+      return !(entry.question.word && entry.question.word.id === id);
+    });
+    var active = state.retry.active[context];
+    if(active && active.question.word && active.question.word.id === id) delete state.retry.active[context];
+  });
 }
 
 var EXCLUDED_KEY = 'excluded-v1';
@@ -544,6 +617,7 @@ function excludeWord(id){ state.excluded[id] = true; saveExcluded(); purgeExclud
 function restoreWord(id){ delete state.excluded[id]; saveExcluded(); }
 /* убрать слово из уже построенных очередей сессии/раздела «Слова», чтобы оно не всплыло позже в том же проходе */
 function purgeExcludedFromLiveQueues(id){
+  cancelRetriesForWord(id);
   function isMatch(q){ return q && q.word && q.word.id === id; }
   if(state.player.words && state.player.words.length){
     var removedBefore = 0;
@@ -622,6 +696,7 @@ function statsOverall(){
 
 /* ============ WORDS STANDALONE QUEUE ============ */
 function resetWordsQueue(){
+  clearRetryContext('words');
   var filtered = ALL_WORDS.filter(function(w){ return state.wordsSelected.indexOf(w.category) !== -1 && !state.excluded[w.id]; });
   var pool = orderWithPairsAdjacent(shuffle(filtered));
   state.player.words = pool;
@@ -632,6 +707,8 @@ function resetWordsQueue(){
 function rebuildStandaloneQuestion(){
   var pool = state.player.words || [];
   if(!pool.length){ state.player.current = null; return; }
+  var retry = takeDueRetry('words');
+  if(retry){ state.player.current = retry; state.ui = {}; return; }
   var tries = 0, q = null;
   while(tries < pool.length){
     var w = pool[state.player.index % pool.length];
@@ -649,12 +726,13 @@ function rebuildStandaloneQuestion(){
   state.ui = {};
 }
 function advanceStandalone(){
-  state.player.index = (state.player.index + 1) % (state.player.words.length || 1);
+  if(!finishRetryTurn('words')) state.player.index = (state.player.index + 1) % (state.player.words.length || 1);
   rebuildStandaloneQuestion();
 }
 
 /* ============ PHRASES STANDALONE QUEUE ============ */
 function resetPhrasesQueue(){
+  clearRetryContext('phrases');
   var filtered = ALL_PHRASES.filter(function(p){ return state.phrasesSelected.indexOf(p.category) !== -1 && !state.excluded[p.id]; });
   state.player.phwords = shuffle(filtered);
   state.player.phindex = 0;
@@ -664,6 +742,8 @@ function resetPhrasesQueue(){
 function rebuildPhrasesQuestion(){
   var pool = state.player.phwords || [];
   if(!pool.length){ state.player.phcurrent = null; return; }
+  var retry = takeDueRetry('phrases');
+  if(retry){ state.player.phcurrent = retry; state.ui = {}; return; }
   var p = pool[state.player.phindex % pool.length];
   var q;
   if(state.phrasesMode === 'cards') q = qCard(p);
@@ -673,12 +753,13 @@ function rebuildPhrasesQuestion(){
   state.ui = {};
 }
 function advancePhrasesStandalone(){
-  state.player.phindex = (state.player.phindex + 1) % (state.player.phwords.length || 1);
+  if(!finishRetryTurn('phrases')) state.player.phindex = (state.player.phindex + 1) % (state.player.phwords.length || 1);
   rebuildPhrasesQuestion();
 }
 
 /* ============ GRAMMAR STANDALONE QUEUE ============ */
 function resetGrammarQueue(){
+  clearRetryContext('grammar');
   var filtered = GRAMMAR_EXERCISES.filter(function(e){ return state.grammarSelected.indexOf(exCatFull(e)) !== -1; });
   var pool = buildPerAnswerSample(filtered, 5, function(e){ return e.pattern; });
   state.player.gwords = pool;
@@ -687,14 +768,16 @@ function resetGrammarQueue(){
 }
 function rebuildGrammarQuestion(){
   var pool = state.player.gwords || [];
-  state.player.gcurrent = pool.length ? qGrammar(pool[state.player.gindex % pool.length]) : null;
+  var retry = takeDueRetry('grammar');
+  state.player.gcurrent = retry || (pool.length ? qGrammar(pool[state.player.gindex % pool.length]) : null);
   state.ui = {};
 }
 function advanceGrammar(){
-  state.player.gindex = (state.player.gindex + 1) % (state.player.gwords.length || 1);
+  if(!finishRetryTurn('grammar')) state.player.gindex = (state.player.gindex + 1) % (state.player.gwords.length || 1);
   rebuildGrammarQuestion();
 }
 function resetGrammarCardsQueue(){
+  clearRetryContext('gramcards');
   var items = [];
   GRAMMAR_TOPICS.forEach(function(t){
     if(state.grammarSelected.indexOf(t.category) !== -1) items = items.concat(t.items);
@@ -706,11 +789,12 @@ function resetGrammarCardsQueue(){
 function rebuildGrammarCardsQuestion(){
   var pool = state.player.gcwords || [];
   var factory = state.grammarCardMode === 'type' ? qGrammarSpell : qGrammarCard;
-  state.player.gccurrent = pool.length ? factory(pool[state.player.gcindex % pool.length]) : null;
+  var retry = takeDueRetry('gramcards');
+  state.player.gccurrent = retry || (pool.length ? factory(pool[state.player.gcindex % pool.length]) : null);
   state.ui = {};
 }
 function advanceGrammarCards(){
-  state.player.gcindex = (state.player.gcindex + 1) % (state.player.gcwords.length || 1);
+  if(!finishRetryTurn('gramcards')) state.player.gcindex = (state.player.gcindex + 1) % (state.player.gcwords.length || 1);
   rebuildGrammarCardsQuestion();
 }
 
@@ -800,6 +884,7 @@ function advanceMock(){
 /* ============ QA STANDALONE QUEUE ============ */
 var QA_FACTORY = { qword: qQWord, qanswer: qQAnswer, response: qResponse };
 function resetQAQueue(){
+  clearRetryContext('qa');
   var pool = shuffle((QA_DATA[state.qaSub] || []).slice());
   state.player.qawords = pool;
   state.player.qaindex = 0;
@@ -808,11 +893,12 @@ function resetQAQueue(){
 function rebuildQAQuestion(){
   var pool = state.player.qawords || [];
   var factory = QA_FACTORY[state.qaSub];
-  state.player.qacurrent = pool.length ? factory(pool[state.player.qaindex % pool.length]) : null;
+  var retry = takeDueRetry('qa');
+  state.player.qacurrent = retry || (pool.length ? factory(pool[state.player.qaindex % pool.length]) : null);
   state.ui = {};
 }
 function advanceQA(){
-  state.player.qaindex = (state.player.qaindex + 1) % (state.player.qawords.length || 1);
+  if(!finishRetryTurn('qa')) state.player.qaindex = (state.player.qaindex + 1) % (state.player.qawords.length || 1);
   rebuildQAQuestion();
 }
 
@@ -859,6 +945,7 @@ function ensurePairedItems(allItems, selected, groupKeyFn){
   return shuffle(result);
 }
 function resetThemeQueue(){
+  clearRetryContext('theme');
   var basePool = (THEME_DATA[state.themeSub] || []).slice();
   var pool;
   if(THEME_MODE_SECTIONS.indexOf(state.themeSub) !== -1){
@@ -882,11 +969,12 @@ function rebuildThemeQuestion(){
   } else {
     factory = THEME_FACTORY[state.themeSub];
   }
-  state.player.thcurrent = pool.length ? factory(pool[state.player.thindex % pool.length]) : null;
+  var retry = takeDueRetry('theme');
+  state.player.thcurrent = retry || (pool.length ? factory(pool[state.player.thindex % pool.length]) : null);
   state.ui = {};
 }
 function advanceTheme(){
-  state.player.thindex = (state.player.thindex + 1) % (state.player.thwords.length || 1);
+  if(!finishRetryTurn('theme')) state.player.thindex = (state.player.thindex + 1) % (state.player.thwords.length || 1);
   rebuildThemeQuestion();
 }
 
@@ -947,6 +1035,7 @@ function computeStatsList(phases){
 }
 
 function startSession(){
+  clearRetryContext('session');
   var allowedCategories = state.session.mode === 'lesson' ? categoriesForLessons(state.session.lessonSelected) : state.session.catSelected;
   var categoryPool = ALL_WORDS.filter(function(w){ return allowedCategories.indexOf(w.category) !== -1 && !state.excluded[w.id]; });
   var pool = shuffle(categoryPool);
@@ -996,6 +1085,8 @@ function currentSessionQuestion(){
     var item = currentMQItem();
     return item ? item.q : null;
   }
+  var retry = takeDueRetry('session');
+  if(retry) return retry;
   var st = currentStage();
   if(!st) return null;
   return st.queue[st.index];
@@ -1041,17 +1132,23 @@ function advanceSession(){
     return;
   }
   var st = currentStage();
-  st.index++;
+  if(!finishRetryTurn('session')) st.index++;
   state.ui = {};
   if(st.index >= st.queue.length){
-    state.session.stageIdx++;
-    if(state.session.stageIdx >= state.session.stages.length){
-      state.session.phase = 'done';
+    if(hasPendingRetries('session')){
+      makeRetriesDue('session');
+    } else {
+      state.session.stageIdx++;
+      clearRetryContext('session');
+      if(state.session.stageIdx >= state.session.stages.length){
+        state.session.phase = 'done';
+      }
     }
   }
   render();
 }
 function restartSessionSetup(){
+  clearRetryContext('session');
   state.session.phase = 'setup';
   render();
 }
@@ -1085,7 +1182,15 @@ function handleCardRate(status){
   var q = getActiveQuestion();
   if(!q || q.type !== 'card') return;
   markWord(q.word.id, status);
-  if(state.view === 'session') sessionAnswered(status === 'known');
+  var isCorrect = status === 'known';
+  if(state.view === 'session') sessionAnswered(isCorrect);
+  recordPracticeAnswer(q, isCorrect);
+  goNextAfterAnswer();
+}
+function handleGrammarCardRate(isCorrect){
+  var q = getActiveQuestion();
+  if(!q || q.type !== 'gramcard') return;
+  recordPracticeAnswer(q, isCorrect);
   goNextAfterAnswer();
 }
 function handleFlip(){ state.ui.flipped = !state.ui.flipped; render(); }
@@ -1124,6 +1229,7 @@ function handleChoice(optValue){
      q.type !== 'themecloze' && q.type !== 'themedate') markWord(q.word.id, isCorrect ? 'known' : 'learning');
   if(state.view === 'session') sessionAnswered(isCorrect);
   if(state.view === 'mockexam') mockAnswered(isCorrect);
+  recordPracticeAnswer(q, isCorrect);
   render();
   setTimeout(function(){ goNextAfterAnswer(); }, isCorrect ? 500 : 1200);
 }
@@ -1142,6 +1248,7 @@ function handleTypeSubmit(value){
   state.ui.typedResult = isCorrect ? 'ok' : 'bad';
   if(q.word) markWord(q.word.id, isCorrect ? 'known' : 'learning');
   if(state.view === 'session') sessionAnswered(isCorrect);
+  recordPracticeAnswer(q, isCorrect);
   render();
 }
 function handleConstructTap(key){
@@ -1313,7 +1420,7 @@ function renderGrammarCard(q){
     '<div class="meaning">' + esc(item.explanation) + '</div>' +
     '<div class="notes"><b>Пример:</b> <span class="kr">' + esc(item.examples[0].kr) + '</span> — ' + esc(item.examples[0].ru) + '</div></div>';
   out += '</div></div>';
-  out += '<div class="controls"><button class="btn btn-know" id="gram-card-next" style="width:100%">Далее</button></div>';
+  out += '<div class="controls"><button class="btn btn-again" id="gram-card-again">Повторить</button><button class="btn btn-know" id="gram-card-know">Знаю</button></div>';
   return out;
 }
 function renderGrammarSpell(q){
@@ -1908,11 +2015,13 @@ function renderSessionRunning(){
   }
   var st = currentStage();
   if(!st) return '<div class="qcard"><div class="empty"><b>Пусто</b></div></div>';
+  var q = currentSessionQuestion();
+  var retrying = !!state.retry.active.session;
   var html = '<div class="stage-header"><span class="stage-label">Этап ' + (state.session.stageIdx+1) + ' из ' + state.session.stages.length + ': ' + esc(st.label) + '</span>' +
-    '<span class="stage-count mono">' + (st.index+1) + '/' + st.queue.length + '</span></div>';
-  var pct = Math.round(((st.index+1)/st.queue.length)*100);
+    '<span class="stage-count mono">' + (retrying ? 'Повторение' : (st.index+1) + '/' + st.queue.length) + '</span></div>';
+  var pct = Math.round((Math.min(st.index+1, st.queue.length)/st.queue.length)*100);
   html += '<div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%"></div></div>';
-  html += renderQuestionCard(st.queue[st.index]);
+  html += renderQuestionCard(q);
   html += resetIconBtn('session-back-to-setup', 'Прервать сессию и вернуться к выбору');
   return html;
 }
@@ -2280,7 +2389,7 @@ function attachHandlers(){
     render();
   }; });
   document.querySelectorAll('[data-gcardmode]').forEach(function(el){
-    el.onclick = function(){ state.grammarCardMode = el.getAttribute('data-gcardmode'); rebuildGrammarCardsQuestion(); render(); };
+    el.onclick = function(){ state.grammarCardMode = el.getAttribute('data-gcardmode'); clearRetryContext('gramcards'); rebuildGrammarCardsQuestion(); render(); };
   });
   document.querySelectorAll('[data-grefview]').forEach(function(el){
     el.onclick = function(){ state.grammarRefView = el.getAttribute('data-grefview'); render(); };
@@ -2341,6 +2450,7 @@ function attachHandlers(){
       state.wordsMode = el.getAttribute('data-wmode');
       state.wordsModeOpen = false;
       state.player.index = 0;
+      clearRetryContext('words');
       rebuildStandaloneQuestion();
       render();
     };
@@ -2376,6 +2486,7 @@ function attachHandlers(){
       state.phrasesMode = el.getAttribute('data-phmode');
       state.phrasesModeOpen = false;
       state.player.phindex = 0;
+      clearRetryContext('phrases');
       rebuildPhrasesQuestion();
       render();
     };
@@ -2452,7 +2563,7 @@ function attachHandlers(){
   var themesubToggle = document.getElementById('themesub-toggle');
   if(themesubToggle) themesubToggle.onclick = function(){ state.themeSubOpen = !state.themeSubOpen; render(); };
   document.querySelectorAll('[data-countermode]').forEach(function(el){
-    el.onclick = function(){ state.themeCounterMode = el.getAttribute('data-countermode'); rebuildThemeQuestion(); render(); };
+    el.onclick = function(){ state.themeCounterMode = el.getAttribute('data-countermode'); clearRetryContext('theme'); rebuildThemeQuestion(); render(); };
   });
   var reshuffleTheme = document.getElementById('reshuffle-theme');
   if(reshuffleTheme) reshuffleTheme.onclick = function(){ resetThemeQueue(); render(); };
@@ -2538,8 +2649,10 @@ function attachHandlers(){
   if(btnAgain) btnAgain.onclick = function(e){ e.stopPropagation(); handleCardRate('learning'); };
   var btnKnow = document.getElementById('btn-know');
   if(btnKnow) btnKnow.onclick = function(e){ e.stopPropagation(); handleCardRate('known'); };
-  var gramCardNext = document.getElementById('gram-card-next');
-  if(gramCardNext) gramCardNext.onclick = function(e){ e.stopPropagation(); goNextAfterAnswer(); };
+  var gramCardAgain = document.getElementById('gram-card-again');
+  if(gramCardAgain) gramCardAgain.onclick = function(e){ e.stopPropagation(); handleGrammarCardRate(false); };
+  var gramCardKnow = document.getElementById('gram-card-know');
+  if(gramCardKnow) gramCardKnow.onclick = function(e){ e.stopPropagation(); handleGrammarCardRate(true); };
   var excludeBtn = document.getElementById('exclude-word');
   if(excludeBtn) excludeBtn.onclick = function(e){ e.stopPropagation(); handleExcludeWord(); };
 
