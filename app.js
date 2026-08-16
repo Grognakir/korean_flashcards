@@ -390,7 +390,9 @@ function initState(){
       phases: [], phaseIdx: 0, mq: {items:[], idx:0}, statsList: [], lastCorrect: null,
       lessonSelected: [1], lessonOpen: false,
       catSelected: CATEGORIES.slice(), catOpen: false },
-    player: { queue: [], index: 0 },
+    mockExam: { phase: 'pick', examKey: null, queue: [], index: 0,
+      listeningCorrect: 0, listeningTotal: 0, readingCorrect: 0, readingTotal: 0 },
+    player: { queue: [], index: 0, mockcurrent: null },
     ui: {} // ephemeral per-question ui state (flipped, chosen, typedValue, typedResult)
   };
 }
@@ -594,6 +596,70 @@ function rebuildExamQuestion(){
 function advanceExam(){
   state.player.exindex = (state.player.exindex + 1) % (state.player.exwords.length || 1);
   rebuildExamQuestion();
+}
+
+function mockQuestionNumber(id, part){
+  var match = id.match(new RegExp('-' + part + '(\\d+)$'));
+  return match ? parseInt(match[1], 10) : 0;
+}
+function listMockExams(){
+  var seen = {};
+  (EXAM_DATA.topikReading || []).forEach(function(item){
+    var idMatch = item.id.match(/^t(\d+)-/);
+    if(!idMatch) return;
+    var key = 't' + idMatch[1];
+    if(seen[key]) return;
+    var sourceMatch = (item.source || '').match(/제(\d+)회/);
+    seen[key] = sourceMatch ? parseInt(sourceMatch[1], 10) : parseInt(idMatch[1], 10);
+  });
+  return Object.keys(seen).map(function(key){
+    return {
+      key: key,
+      num: seen[key],
+      listeningCount: (EXAM_DATA.listening || []).filter(function(item){ return item.id.indexOf(key + '-l') === 0; }).length,
+      readingCount: (EXAM_DATA.topikReading || []).filter(function(item){ return item.id.indexOf(key + '-r') === 0; }).length
+    };
+  }).sort(function(a, b){ return b.num - a.num; });
+}
+function startMockExam(key){
+  var listeningPart = (EXAM_DATA.listening || []).filter(function(item){
+    return item.id.indexOf(key + '-l') === 0;
+  }).sort(function(a, b){
+    return mockQuestionNumber(a.id, 'l') - mockQuestionNumber(b.id, 'l');
+  }).map(function(item){
+    return {kind:'exlisten', item:item, num:mockQuestionNumber(item.id, 'l')};
+  });
+  var readingPart = (EXAM_DATA.topikReading || []).filter(function(item){
+    return item.id.indexOf(key + '-r') === 0;
+  }).sort(function(a, b){
+    return mockQuestionNumber(a.id, 'r') - mockQuestionNumber(b.id, 'r');
+  }).map(function(item){
+    return {kind:'extopikread', item:item, num:mockQuestionNumber(item.id, 'r')};
+  });
+  state.mockExam = { phase:'running', examKey:key, queue:listeningPart.concat(readingPart), index:0,
+    listeningCorrect:0, listeningTotal:0, readingCorrect:0, readingTotal:0 };
+  rebuildMockQuestion();
+}
+function rebuildMockQuestion(){
+  var entry = state.mockExam.queue[state.mockExam.index];
+  state.player.mockcurrent = entry ? (entry.kind === 'exlisten' ? qExamListening(entry.item) : qExamTopikReading(entry.item)) : null;
+  state.ui = {};
+}
+function mockAnswered(isCorrect){
+  var entry = state.mockExam.queue[state.mockExam.index];
+  if(!entry) return;
+  if(entry.kind === 'exlisten'){
+    state.mockExam.listeningTotal++;
+    if(isCorrect) state.mockExam.listeningCorrect++;
+  } else {
+    state.mockExam.readingTotal++;
+    if(isCorrect) state.mockExam.readingCorrect++;
+  }
+}
+function advanceMock(){
+  state.mockExam.index++;
+  if(state.mockExam.index >= state.mockExam.queue.length) state.mockExam.phase = 'done';
+  else rebuildMockQuestion();
 }
 
 /* ============ QA STANDALONE QUEUE ============ */
@@ -862,6 +928,7 @@ function getActiveQuestion(){
   if(state.view === 'grammar' && state.grammarSub === 'practice') return state.player.gcurrent;
   if(state.view === 'grammar' && state.grammarSub === 'cards') return state.player.gccurrent;
   if(state.view === 'exam') return state.player.excurrent;
+  if(state.view === 'mockexam') return state.player.mockcurrent;
   if(state.view === 'qa') return state.player.qacurrent;
   if(state.view === 'theme') return state.player.thcurrent;
   if(state.view === 'words') return state.player.current;
@@ -873,6 +940,7 @@ function goNextAfterAnswer(){
   else if(state.view === 'grammar' && state.grammarSub === 'cards') { advanceGrammarCards(); render(); }
   else if(state.view === 'grammar') { advanceGrammar(); render(); }
   else if(state.view === 'exam') { advanceExam(); render(); }
+  else if(state.view === 'mockexam') { advanceMock(); render(); }
   else if(state.view === 'qa') { advanceQA(); render(); }
   else if(state.view === 'theme') { advanceTheme(); render(); }
   else if(state.view === 'phrases') { advancePhrasesStandalone(); render(); }
@@ -920,6 +988,7 @@ function handleChoice(optValue){
      q.type !== 'qword' && q.type !== 'qanswer' && q.type !== 'response' &&
      q.type !== 'themecloze' && q.type !== 'themedate') markWord(q.word.id, isCorrect ? 'known' : 'learning');
   if(state.view === 'session') sessionAnswered(isCorrect);
+  if(state.view === 'mockexam') mockAnswered(isCorrect);
   render();
   setTimeout(function(){ goNextAfterAnswer(); }, isCorrect ? 500 : 1200);
 }
@@ -1424,7 +1493,7 @@ var NAV_ICONS = {
   search: '<circle cx="10.5" cy="10.5" r="6.5"/><line x1="15.5" y1="15.5" x2="20" y2="20"/>'
 };
 var VIEW_GROUPS = {
-  practice: [['session','Сессия'],['exam','Экзамен'],['qa','Вопросы'],['theme','Темы']],
+  practice: [['session','Сессия'],['exam','Экзамен'],['qa','Вопросы'],['theme','Темы'],['mockexam','Пробный экзамен']],
   vocab: [['words','Слова'],['phrases','Фразы']],
   grammar: [['grammar','Грамматика']],
   search: [['search','Поиск']]
@@ -1746,6 +1815,50 @@ function renderExamView(){
   return html;
 }
 
+function renderMockPick(){
+  var exams = listMockExams();
+  var html = '<div class="panel"><div class="meaning" style="text-align:center;font-size:19px">Выберите экзамен</div>';
+  if(exams.length){
+    html += '<div class="cat-grid open">';
+    exams.forEach(function(exam){
+      var counts = exam.listeningCount ? exam.listeningCount + ' аудирование + ' + exam.readingCount + ' чтение' : exam.readingCount + ' чтение';
+      html += '<div class="cat-chip" data-mockstart="' + esc(exam.key) + '">' + exam.num + ' · ' + counts + '</div>';
+    });
+    html += '</div>';
+  } else {
+    html += '<div class="empty">Нет доступных экзаменов</div>';
+  }
+  html += '</div>';
+  return html;
+}
+function renderMockRunning(){
+  var entry = state.mockExam.queue[state.mockExam.index];
+  if(!entry) return '<div class="qcard"><div class="empty"><b>Пусто</b></div></div>';
+  var section = entry.kind === 'exlisten' ? 'Аудирование' : 'Чтение';
+  var html = '<div class="stage-header"><span class="stage-label">' + section + ' · № ' + entry.num + '</span>' +
+    '<span class="stage-count mono">Вопрос ' + (state.mockExam.index+1) + ' из ' + state.mockExam.queue.length + '</span></div>';
+  var pct = Math.round(((state.mockExam.index+1)/state.mockExam.queue.length)*100);
+  html += '<div class="progress-bar"><div class="progress-fill" style="width:' + pct + '%"></div></div>';
+  html += renderQuestionCard(state.player.mockcurrent);
+  html += '<div class="controls"><button class="btn" id="mock-quit">Выйти к списку</button></div>';
+  return html;
+}
+function renderMockDone(){
+  var html = '<div class="qcard"><div class="meaning" style="text-align:center;font-size:19px;margin-bottom:14px">Экзамен пройден 🎉</div>';
+  if(state.mockExam.listeningTotal > 0){
+    html += '<div class="summary-row"><span>Аудирование</span><span class="val">' + state.mockExam.listeningCorrect + ' / ' + state.mockExam.listeningTotal + '</span></div>';
+  }
+  html += '<div class="summary-row"><span>Чтение</span><span class="val">' + state.mockExam.readingCorrect + ' / ' + state.mockExam.readingTotal + '</span></div>';
+  html += '<div class="controls" style="margin-top:16px"><button class="btn btn-primary" id="mock-restart">Выбрать другой экзамен</button></div>';
+  html += '</div>';
+  return html;
+}
+function renderMockExamView(){
+  if(state.mockExam.phase === 'pick') return renderMockPick();
+  if(state.mockExam.phase === 'running') return renderMockRunning();
+  return renderMockDone();
+}
+
 function renderQAView(){
   var subs = [['qword','Вопрос. слова'],['qanswer','Вопрос → ответ'],['response','Ответы и связки']];
   var currentLabel = (subs.filter(function(s){ return s[0]===state.qaSub; })[0] || subs[0])[1];
@@ -1998,6 +2111,7 @@ function render(){
   else if(state.view === 'phrases') html += renderPhrasesView();
   else if(state.view === 'grammar') html += renderGrammarView();
   else if(state.view === 'exam') html += renderExamView();
+  else if(state.view === 'mockexam') html += renderMockExamView();
   else if(state.view === 'qa') html += renderQAView();
   else if(state.view === 'theme') html += renderThemeView();
   else if(state.view === 'search') html += renderSearchView();
@@ -2177,6 +2291,14 @@ function attachHandlers(){
   if(examsubToggle) examsubToggle.onclick = function(){ state.examSubOpen = !state.examSubOpen; render(); };
   var reshuffleE = document.getElementById('reshuffle-exam');
   if(reshuffleE) reshuffleE.onclick = function(){ resetExamQueue(); render(); };
+
+  document.querySelectorAll('.cat-chip[data-mockstart]').forEach(function(el){
+    el.onclick = function(){ startMockExam(el.getAttribute('data-mockstart')); render(); };
+  });
+  var mockQuit = document.getElementById('mock-quit');
+  if(mockQuit) mockQuit.onclick = function(){ state.mockExam.phase = 'pick'; render(); };
+  var mockRestart = document.getElementById('mock-restart');
+  if(mockRestart) mockRestart.onclick = function(){ state.mockExam.phase = 'pick'; render(); };
 
   // qa sub-tabs
   document.querySelectorAll('.cat-chip[data-qasub]').forEach(function(el){
