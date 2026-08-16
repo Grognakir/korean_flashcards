@@ -267,6 +267,10 @@ function qExamReading(item){
 function qExamListening(item){
   return {type:'exlisten', item: item, options: shuffle(item.options.slice())};
 }
+/* ---- Экзамен: чтение TOPIK (локальные файлы, вне git) ---- */
+function qExamTopikReading(item){
+  return {type:'extopikread', item: item, options: shuffle(item.options.slice())};
+}
 /* ---- Экзамен: порядок предложений ---- */
 function permutations4(){
   var base = [0,1,2,3];
@@ -574,7 +578,7 @@ function advanceGrammarCards(){
 }
 
 /* ============ EXAM STANDALONE QUEUE ============ */
-var EXAM_FACTORY = { reading: qExamReading, ordering: qExamOrdering, construct: qExamConstruct, cloze: qExamCloze, listening: qExamListening };
+var EXAM_FACTORY = { reading: qExamReading, ordering: qExamOrdering, construct: qExamConstruct, cloze: qExamCloze, listening: qExamListening, topikReading: qExamTopikReading };
 function resetExamQueue(){
   var pool = shuffle((EXAM_DATA[state.examSub] || []).slice());
   state.player.exwords = pool;
@@ -903,6 +907,7 @@ function handleChoice(optValue){
   else if(q.type === 'grammar') isCorrect = (optValue === q.ex.correct);
   else if(q.type === 'exread') isCorrect = (optValue === q.item.correct);
   else if(q.type === 'exlisten') isCorrect = (optValue === q.item.correct);
+  else if(q.type === 'extopikread') isCorrect = (optValue === q.item.correct);
   else if(q.type === 'exorder') isCorrect = (optValue === q.correctLabel);
   else if(q.type === 'excloze') isCorrect = (optValue === q.item.correct);
   else if(q.type === 'qword') isCorrect = (optValue === q.item.correct);
@@ -910,7 +915,8 @@ function handleChoice(optValue){
   else if(q.type === 'response') isCorrect = (optValue === q.item.correct);
   else if(q.type === 'themecloze') isCorrect = (optValue === q.item.correct);
   else if(q.type === 'themedate') isCorrect = (optValue === q.item.correct);
-  if(q.type !== 'grammar' && q.type !== 'exread' && q.type !== 'exorder' && q.type !== 'excloze' &&
+  if(q.type !== 'grammar' && q.type !== 'exread' && q.type !== 'exlisten' && q.type !== 'extopikread' &&
+     q.type !== 'exorder' && q.type !== 'excloze' &&
      q.type !== 'qword' && q.type !== 'qanswer' && q.type !== 'response' &&
      q.type !== 'themecloze' && q.type !== 'themedate') markWord(q.word.id, isCorrect ? 'known' : 'learning');
   if(state.view === 'session') sessionAnswered(isCorrect);
@@ -1142,7 +1148,26 @@ function renderExamReading(q){
 function renderExamListening(q){
   var item = q.item;
   var out = '<div class="qcard"><div class="taegeuk-edge"></div>';
-  out += '<audio controls preload="none" style="width:100%;margin-bottom:16px" src="' + esc(item.audio) + '"></audio>';
+  out += '<audio controls preload="none" style="width:100%;margin-bottom:16px" src="' + esc(encodeURI(item.audio)) + '"></audio>';
+  out += '<div class="q-translit mono" style="text-align:left;margin-bottom:12px">' + esc(item.question) + '</div>';
+  q.options.forEach(function(opt){
+    var cls = 'opt';
+    if(state.ui.chosen){ if(opt === item.correct) cls += ' correct'; else if(opt === state.ui.chosen) cls += ' wrong'; }
+    out += '<button class="' + cls + '" data-choice="' + esc(opt) + '"' + (state.ui.chosen?' disabled':'') + '>' + esc(opt) + '</button>';
+  });
+  if(state.ui.chosen){
+    out += '<div class="feedback ' + (state.ui.chosen===item.correct?'ok':'bad') + '">' +
+      (state.ui.chosen===item.correct ? 'Верно!' : ('Правильно: <span class="ans">'+esc(item.correct)+'</span>')) + '</div>';
+  }
+  out += '</div>';
+  return out;
+}
+function renderExamTopikReading(q){
+  var item = q.item;
+  var out = '<div class="qcard"><div class="taegeuk-edge"></div>';
+  if(item.passage){
+    out += '<div class="notes kr" style="font-size:15px;line-height:1.7;margin-bottom:16px;padding:14px;background:var(--paper);border-radius:12px;max-width:none">' + esc(item.passage) + '</div>';
+  }
   out += '<div class="q-translit mono" style="text-align:left;margin-bottom:12px">' + esc(item.question) + '</div>';
   q.options.forEach(function(opt){
     var cls = 'opt';
@@ -1375,6 +1400,7 @@ function renderQuestionCard(q){
   if(q.type === 'grammar') return renderGrammar(q);
   if(q.type === 'exread') return renderExamReading(q);
   if(q.type === 'exlisten') return renderExamListening(q);
+  if(q.type === 'extopikread') return renderExamTopikReading(q);
   if(q.type === 'exorder') return renderExamOrdering(q);
   if(q.type === 'excon') return renderExamConstruct(q);
   if(q.type === 'excloze') return renderExamCloze(q);
@@ -1703,6 +1729,7 @@ function renderSessionView(){
 function renderExamView(){
   var subs = [['reading','Чтение'],['ordering','Порядок'],['construct','Составь'],['cloze','Вставь']];
   if(EXAM_DATA.listening && EXAM_DATA.listening.length) subs.push(['listening','Аудирование']);
+  if(EXAM_DATA.topikReading && EXAM_DATA.topikReading.length) subs.push(['topikReading','Чтение TOPIK']);
   var currentLabel = (subs.filter(function(s){ return s[0]===state.examSub; })[0] || subs[0])[1];
   var html = '<div class="panel"><div class="panel-row" id="examsub-toggle"><span class="label">Тип задания</span>' +
     '<span class="value mono">' + esc(currentLabel) + '<span class="chev' + (state.examSubOpen?' open':'') + '">▾</span></span></div>';
@@ -2281,6 +2308,9 @@ async function boot(){
   RAW = results[0]; GRAMMAR_TOPICS = results[1]; GRAMMAR_EXERCISES = results[2];
   EXAM_DATA = results[3]; QA_DATA = results[4]; THEME_DATA = results[5]; PHRASES_RAW = results[6];
   EXAM_DATA.listening = await fetch('data/local/listening.json')
+    .then(function(r){ return r.ok ? r.json() : []; })
+    .catch(function(){ return []; });
+  EXAM_DATA.topikReading = await fetch('data/local/reading.json')
     .then(function(r){ return r.ok ? r.json() : []; })
     .catch(function(){ return []; });
   initData();

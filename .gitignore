@@ -1,4 +1,6 @@
 .DS_Store
 dev_docs/env-vars.txt
 data/local/listening.json
+data/local/reading.json
 data/local/audio/
+references/
