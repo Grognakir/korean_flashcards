@@ -239,10 +239,10 @@ function qRu2Kr(word, pool){
   var opts = shuffle([word].concat(distractors));
   return {type:'ru2kr', word:word, options: opts};
 }
-function qSentChoice(word){
+function qSentChoice(word, pool){
   var fb = firstExampleBlank(word);
   if(!fb) return null;
-  var distractors = distractorWords(word, 4);
+  var distractors = distractorWords(word, 4, pool);
   var opts = shuffle([word].concat(distractors));
   return {type:'sentchoice', word:word, example: fb.example, blank: fb.blank, options: opts};
 }
@@ -252,9 +252,9 @@ function qSentType(word){
   if(!fb) return null;
   return {type:'senttype', word:word, example: fb.example, blank: fb.blank};
 }
-function qGrammar(ex){
+function qGrammar(ex, word){
   var opts = shuffle(ex.options.slice());
-  return {type:'grammar', ex: ex, options: opts};
+  return {type:'grammar', ex: ex, options: opts, word: word || null};
 }
 function qGrammarCard(item){ return {type:'gramcard', item: item}; }
 function qGrammarSpell(item){ return {type:'gramspell', item: item}; }
@@ -467,13 +467,24 @@ function qThemeMixed(item){
   var factory = MIXED_THEME_FACTORIES[Math.floor(Math.random()*MIXED_THEME_FACTORIES.length)];
   return factory(item);
 }
-function qAntSyn(word){
+var COUNTER_EQUIVALENT_ANSWERS = {
+  cnt11:['자루','개'], cnt20:['개','자루'], cnt27:['개','자루'],
+  cnt64:['자루','개'], cnt65:['자루','개'], cnt66:['자루','개'],
+  cnt73:['정','알'], cnt74:['정','알'], cnt75:['정','알']
+};
+function itemAcceptedAnswers(item){
+  return COUNTER_EQUIVALENT_ANSWERS[item.id] || [item.correct];
+}
+function itemAcceptsAnswer(item, value){ return itemAcceptedAnswers(item).indexOf(value) !== -1; }
+function itemAnswersLabel(item){ return itemAcceptedAnswers(item).join(' / '); }
+function qAntSyn(word, allowedPool){
   var rel = word.related;
   if(!rel) return null;
+  var sourcePool = allowedPool || ALL_WORDS;
   var target = null;
-  for(var i=0;i<ALL_WORDS.length;i++){ if(ALL_WORDS[i].kr === rel.target){ target = ALL_WORDS[i]; break; } }
+  for(var i=0;i<sourcePool.length;i++){ if(sourcePool[i].kr === rel.target){ target = sourcePool[i]; break; } }
   if(!target) return null;
-  var pool = ALL_WORDS.filter(function(w){ return w.id !== word.id && w.kr !== target.kr; });
+  var pool = sourcePool.filter(function(w){ return w.id !== word.id && w.kr !== target.kr; });
   var opts = shuffle([target].concat(sample(pool, 4)));
   return {type:'antsyn', word:word, relType: rel.type, target: target, options: opts};
 }
@@ -979,15 +990,45 @@ function advanceTheme(){
 }
 
 /* ============ SESSION ============ */
+function buildSessionGrammar(words){
+  var entries = words.map(function(word){
+    var fb = firstExampleBlank(word);
+    return fb ? {word:word, example:fb.example, blank:fb.blank} : null;
+  }).filter(Boolean);
+  return sample(entries, Math.min(5, entries.length)).map(function(entry){
+    var correct = entry.blank.matched;
+    var seen = {};
+    var distractors = [];
+    entries.forEach(function(other){
+      var form = other.blank.matched;
+      if(other.word.id !== entry.word.id && form !== correct && !seen[form]){
+        seen[form] = true;
+        distractors.push(form);
+      }
+    });
+    var ex = {
+      id: 'session-grammar::' + entry.word.id,
+      cat: 'Форма слова из карточек: ' + entry.word.kr,
+      before: entry.blank.before,
+      after: entry.blank.after,
+      options: [correct].concat(sample(distractors, 4)),
+      correct: correct,
+      ru: entry.example.ru,
+      note: 'Используется форма слова «' + entry.word.kr + '» (' + entry.word.meaning + ').'
+    };
+    return qGrammar(ex, entry.word);
+  });
+}
+
 var STAGE_DEFS = [
   {key:'cards', label:'Карточки', build: function(words){ return words.map(qCard); }},
-  {key:'kr2ru', label:'Слово → перевод', build: function(words){ return words.map(qKr2Ru); }},
-  {key:'ru2kr', label:'Перевод → слово', build: function(words){ return words.map(qRu2Kr); }},
-  {key:'sentchoice', label:'Предложение: выбор слова', build: function(words){ return words.map(qSentChoice).filter(Boolean); }},
+  {key:'kr2ru', label:'Слово → перевод', build: function(words){ return words.map(function(w){ return qKr2Ru(w, words); }); }},
+  {key:'ru2kr', label:'Перевод → слово', build: function(words){ return words.map(function(w){ return qRu2Kr(w, words); }); }},
+  {key:'sentchoice', label:'Предложение: выбор слова', build: function(words){ return words.map(function(w){ return qSentChoice(w, words); }).filter(Boolean); }},
   {key:'spell', label:'Написание', build: function(words){ return words.map(qSpell); }},
   {key:'senttype', label:'Предложение: впишите слово', build: function(words){ return words.map(qSentType).filter(Boolean); }},
-  {key:'antsyn', label:'Антонимы и синонимы', build: function(words){ return words.map(qAntSyn).filter(Boolean); }},
-  {key:'grammar', label:'Грамматика', build: function(words, eligibleGrammar){ var pool = eligibleGrammar || GRAMMAR_EXERCISES; return sample(pool, Math.min(5, pool.length)).map(qGrammar); }}
+  {key:'antsyn', label:'Антонимы и синонимы', build: function(words){ return words.map(function(w){ return qAntSyn(w, words); }).filter(Boolean); }},
+  {key:'grammar', label:'Грамматика', build: function(words){ return buildSessionGrammar(words); }}
 ];
 
 var STAGE_LABELS = {
@@ -997,7 +1038,7 @@ var STAGE_LABELS = {
 var STAGE_ORDER = ['cards','kr2ru','ru2kr','sentchoice','spell','senttype','antsyn','grammar'];
 function stageKeyForType(t){ return t === 'card' ? 'cards' : t; }
 
-function buildAdaptivePhases(wordSet, eligibleGrammar){
+function buildAdaptivePhases(wordSet){
   var batchSize = 10;
   var batches = [];
   for(var i=0;i<wordSet.length;i+=batchSize){ batches.push(wordSet.slice(i, i+batchSize)); }
@@ -1015,15 +1056,15 @@ function buildAdaptivePhases(wordSet, eligibleGrammar){
   });
   var finalItems = [];
   wordSet.forEach(function(w){
-    finalItems.push({q: qKr2Ru(w)});
-    finalItems.push({q: qRu2Kr(w)});
-    var sc = qSentChoice(w); if(sc) finalItems.push({q: sc});
+    finalItems.push({q: qKr2Ru(w, wordSet)});
+    finalItems.push({q: qRu2Kr(w, wordSet)});
+    var sc = qSentChoice(w, wordSet); if(sc) finalItems.push({q: sc});
     finalItems.push({q: qSpell(w)});
     var stq = qSentType(w); if(stq) finalItems.push({q: stq});
-    var asq = qAntSyn(w); if(asq) finalItems.push({q: asq});
+    var asq = qAntSyn(w, wordSet); if(asq) finalItems.push({q: asq});
   });
-  sample(eligibleGrammar, Math.min(5, eligibleGrammar.length)).forEach(function(ex){
-    finalItems.push({q: qGrammar(ex)});
+  buildSessionGrammar(wordSet).forEach(function(q){
+    finalItems.push({q:q});
   });
   phases.push({ type:'final', label:'Смешанная практика — до идеала', items: orderQuestionsWithPairsAdjacent(shuffle(finalItems)) });
   return phases;
@@ -1041,13 +1082,10 @@ function startSession(){
   var pool = shuffle(categoryPool);
   var wordSet = orderWithPairsAdjacent(expandWithPairs(pool.slice(0, state.session.size), categoryPool));
   state.session.wordSet = wordSet;
-  var eligibleGrammar = state.session.mode === 'lesson'
-    ? GRAMMAR_EXERCISES.filter(function(e){ return e.lesson.some(function(l){ return state.session.lessonSelected.indexOf(l) !== -1; }); })
-    : GRAMMAR_EXERCISES;
 
   if(state.session.orderMode === 'mixed'){
     if(wordSet.length === 0){ state.session.emptyWarning = true; render(); return; }
-    var phases = buildAdaptivePhases(wordSet, eligibleGrammar);
+    var phases = buildAdaptivePhases(wordSet);
     state.session.emptyWarning = false;
     state.session.phases = phases;
     state.session.phaseIdx = 0;
@@ -1059,7 +1097,7 @@ function startSession(){
     return;
   }
 
-  var stages = STAGE_DEFS.map(function(sd){ return {key: sd.key, label: sd.label, queue: sd.build(wordSet, eligibleGrammar), index:0, correct:0, total:0}; })
+  var stages = STAGE_DEFS.map(function(sd){ return {key: sd.key, label: sd.label, queue: sd.build(wordSet), index:0, correct:0, total:0}; })
     .filter(function(st){ return st.queue.length > 0; });
   if(stages.length === 0){
     state.session.emptyWarning = true;
@@ -1221,7 +1259,7 @@ function handleChoice(optValue){
   else if(q.type === 'qword') isCorrect = (optValue === q.item.correct);
   else if(q.type === 'qanswer') isCorrect = (optValue === q.item.correct);
   else if(q.type === 'response') isCorrect = (optValue === q.item.correct);
-  else if(q.type === 'themecloze') isCorrect = (optValue === q.item.correct);
+  else if(q.type === 'themecloze') isCorrect = itemAcceptsAnswer(q.item, optValue);
   else if(q.type === 'themedate') isCorrect = (optValue === q.item.correct);
   if(q.type !== 'grammar' && q.type !== 'exread' && q.type !== 'exlisten' && q.type !== 'extopikread' &&
      q.type !== 'exorder' && q.type !== 'excloze' &&
@@ -1237,13 +1275,15 @@ function handleTypeSubmit(value){
   var q = getActiveQuestion();
   if(!q) return;
   if(state.ui.typedResult){ goNextAfterAnswer(); return; }
-  var correct;
-  if(q.type === 'spell') correct = q.word.kr;
-  else if(q.type === 'countertype') correct = q.item.correct;
-  else if(q.type === 'countertranslate') correct = (q.item.before + q.item.correct + q.item.after).trim();
-  else if(q.type === 'gramspell') correct = q.item.pattern;
-  else correct = q.blank.matched;
-  var isCorrect = value.trim() === correct;
+  var correctAnswers;
+  if(q.type === 'spell') correctAnswers = [q.word.kr];
+  else if(q.type === 'countertype') correctAnswers = itemAcceptedAnswers(q.item);
+  else if(q.type === 'countertranslate') correctAnswers = itemAcceptedAnswers(q.item).map(function(answer){
+    return (q.item.before + answer + q.item.after).trim();
+  });
+  else if(q.type === 'gramspell') correctAnswers = [q.item.pattern];
+  else correctAnswers = [q.blank.matched];
+  var isCorrect = correctAnswers.indexOf(value.trim()) !== -1;
   state.ui.typedValue = value;
   state.ui.typedResult = isCorrect ? 'ok' : 'bad';
   if(q.word) markWord(q.word.id, isCorrect ? 'known' : 'learning');
@@ -1636,16 +1676,18 @@ function renderThemeCloze(q){
   var out = '<div class="qcard"><div class="taegeuk-edge"></div>';
   out += baseFormLabel(item);
   out += '<div class="q-translit mono" style="margin-bottom:10px">выберите правильный вариант</div>';
+  if(state.themeSub === 'counters') out += '<div class="sent-ru">' + esc(item.ru) + '</div>';
   var mid = state.ui.chosen ? ('<span class="gap-fill kr">' + esc(state.ui.chosen) + '</span>') : '<span class="gap"></span>';
   out += '<div class="sent-blank kr" style="font-size:17px">' + esc(item.before) + mid + esc(item.after) + '</div>';
   q.options.forEach(function(opt){
     var cls = 'opt kr';
-    if(state.ui.chosen){ if(opt === item.correct) cls += ' correct'; else if(opt === state.ui.chosen) cls += ' wrong'; }
+    if(state.ui.chosen){ if(itemAcceptsAnswer(item, opt)) cls += ' correct'; else if(opt === state.ui.chosen) cls += ' wrong'; }
     out += '<button class="' + cls + '" data-choice="' + esc(opt) + '"' + (state.ui.chosen?' disabled':'') + '>' + esc(opt) + '</button>';
   });
   if(state.ui.chosen){
-    out += '<div class="feedback ' + (state.ui.chosen===item.correct?'ok':'bad') + '">' +
-      (state.ui.chosen===item.correct ? 'Верно!' : ('Правильно: <span class="ans kr">'+esc(item.correct)+'</span>')) +
+    var isCorrect = itemAcceptsAnswer(item, state.ui.chosen);
+    out += '<div class="feedback ' + (isCorrect?'ok':'bad') + '">' +
+      (isCorrect ? 'Верно!' : ('Правильно: <span class="ans kr">'+esc(itemAnswersLabel(item))+'</span>')) +
       '<span class="note">' + esc(item.ru) + '</span></div>';
   }
   out += '</div>';
@@ -1662,14 +1704,14 @@ function renderCounterType(q){
     '<button type="submit">' + (state.ui.typedResult ? 'Дальше' : 'Ответить') + '</button></form>';
   if(state.ui.typedResult){
     out += state.ui.typedResult === 'ok' ? '<div class="feedback ok">Верно!</div>' :
-      ('<div class="feedback bad">Правильно: <span class="ans kr">' + esc(item.correct) + '</span></div>');
+      ('<div class="feedback bad">Правильно: <span class="ans kr">' + esc(itemAnswersLabel(item)) + '</span></div>');
   }
   out += '</div>';
   return out;
 }
 function renderCounterTranslate(q){
   var item = q.item;
-  var fullSentence = (item.before + item.correct + item.after).trim();
+  var fullSentences = itemAcceptedAnswers(item).map(function(answer){ return (item.before + answer + item.after).trim(); });
   var out = '<div class="qcard"><div class="taegeuk-edge"></div>';
   out += baseFormLabel(item);
   out += '<div class="q-translit mono" style="margin-bottom:10px">переведите предложение на корейский</div>';
@@ -1678,7 +1720,7 @@ function renderCounterTranslate(q){
     '<button type="submit">' + (state.ui.typedResult ? 'Дальше' : 'Ответить') + '</button></form>';
   if(state.ui.typedResult){
     out += state.ui.typedResult === 'ok' ? '<div class="feedback ok">Верно!</div>' :
-      ('<div class="feedback bad">Правильно: <span class="ans kr">' + esc(fullSentence) + '</span></div>');
+      ('<div class="feedback bad">Правильно: <span class="ans kr">' + esc(fullSentences.join(' / ')) + '</span></div>');
   }
   out += '</div>';
   return out;
@@ -1953,7 +1995,7 @@ function renderSessionSetup(){
   html += '<div class="notes" style="text-align:center;margin:0 auto 6px;max-width:420px">Карточки → слово→перевод → перевод→слово → предложение (выбор) → написание → предложение (ввод) → антонимы/синонимы → грамматика</div>';
   html += '</div>';
 
-  html += '<div class="q-translit mono" style="margin:14px 0 6px">откуда брать слова и грамматику</div>';
+  html += '<div class="q-translit mono" style="margin:14px 0 6px">откуда брать слова</div>';
   html += '<div class="sub-toggle">' +
     '<button data-sessmode="lesson" class="' + (state.session.mode==='lesson'?'active':'') + '">По теме (урок)</button>' +
     '<button data-sessmode="category" class="' + (state.session.mode==='category'?'active':'') + '">По категории слов</button></div>';
