@@ -1757,6 +1757,9 @@ async function generateWordViaAI(){
   render();
   try{
     var word = await llmRequest('/api/generate-word', {input: input});
+    if(/[가-힣ㄱ-ㅎㅏ-ㅣ]/.test(input) && input !== word.kr){
+      word.correctedFrom = input;
+    }
     state.aiPreview = word;
   }catch(e){
     state.aiError = e.message || 'Не удалось сгенерировать слово';
@@ -1851,7 +1854,8 @@ function renderSearchView(){
   if(state.aiPanelOpen){
     if(state.aiPreview){
       var p = state.aiPreview;
-      html += '<div class="search-item" style="margin-top:14px">' +
+      if(p.correctedFrom){ html += '<div class="feedback ok" style="margin-top:14px">Вы ввели «' + esc(p.correctedFrom) + '» — похоже, это опечатка. Найдено: «' + esc(p.kr) + '».</div>'; }
+      html += '<div class="search-item" style="margin-top:' + (p.correctedFrom ? '10px' : '14px') + '">' +
         '<div class="search-row"><span class="kr search-kr">' + esc(p.kr) + '</span><span class="translit mono">' + esc(p.translit) + '</span></div>' +
         '<div class="search-meaning">' + esc(p.meaning) + '</div>' +
         '<div class="search-cat mono">' + esc(shortCat(p.category)) + (p.newCategory ? ' · новая категория' : '') + '</div>';
