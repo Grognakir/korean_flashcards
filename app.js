@@ -325,6 +325,141 @@ function qThemeCloze(item){
 function qThemeDate(item){
   return {type:'themedate', item: item, options: shuffle(item.options.slice())};
 }
+var SINO_NUMBER_DIGITS = ['영','일','이','삼','사','오','육','칠','팔','구'];
+var NATIVE_NUMBER_ONES = {1:'하나',2:'둘',3:'셋',4:'넷',5:'다섯',6:'여섯',7:'일곱',8:'여덟',9:'아홉'};
+var NATIVE_NUMBER_COUNTER_ONES = {1:'한',2:'두',3:'세',4:'네',5:'다섯',6:'여섯',7:'일곱',8:'여덟',9:'아홉'};
+var NATIVE_NUMBER_TENS = {10:'열',20:'스물',30:'서른',40:'마흔',50:'쉰',60:'예순',70:'일흔',80:'여든',90:'아흔'};
+function sinoUnder10000(n){
+  var units = [[1000,'천'],[100,'백'],[10,'십'],[1,'']];
+  var out = '';
+  units.forEach(function(unit){
+    var digit = Math.floor(n / unit[0]) % 10;
+    if(!digit) return;
+    if(unit[0] === 1 || digit !== 1) out += SINO_NUMBER_DIGITS[digit];
+    out += unit[1];
+  });
+  return out;
+}
+function sinoNumber(n){
+  if(n === 0) return '영';
+  if(n < 10000) return sinoUnder10000(n);
+  var high = Math.floor(n / 10000);
+  var low = n % 10000;
+  var highText = (high === 1 ? '' : sinoNumber(high)) + '만';
+  return highText + (low ? ' ' + sinoUnder10000(low) : '');
+}
+function nativeNumber(n){
+  if(n < 1 || n > 99) return null;
+  if(n < 10) return NATIVE_NUMBER_ONES[n];
+  var tens = Math.floor(n / 10) * 10;
+  var ones = n % 10;
+  return NATIVE_NUMBER_TENS[tens] + (ones ? NATIVE_NUMBER_ONES[ones] : '');
+}
+function nativeCounterNumber(n){
+  if(n < 1 || n > 99) return null;
+  var tens = n >= 10 ? NATIVE_NUMBER_TENS[Math.floor(n / 10) * 10] : '';
+  var ones = n % 10;
+  if(!ones) return n === 20 ? '스무' : tens;
+  return tens + NATIVE_NUMBER_COUNTER_ONES[ones];
+}
+function numberOptions(correct, candidates){
+  var options = [correct];
+  candidates.forEach(function(option){
+    if(option != null && options.indexOf(String(option)) === -1) options.push(String(option));
+  });
+  return options.slice(0, 4);
+}
+function numericNumberOptions(n){
+  return [n+1, Math.max(0,n-1), n+10, n+100, Math.max(0,n-10)].map(String);
+}
+function sinoReadingOptions(n){
+  if(n === 0) return ['공','하나','일','십'];
+  var candidates = [];
+  if(n < 100){ candidates.push(nativeNumber(n), nativeCounterNumber(n)); }
+  candidates.push(sinoNumber(n+1), sinoNumber(Math.max(0,n-1)), sinoNumber(n+10), sinoNumber(n+100));
+  return candidates;
+}
+function nativeReadingOptions(n){
+  return [sinoNumber(n), nativeCounterNumber(n), nativeNumber(Math.min(99,n+1)), nativeNumber(Math.max(1,n-1)), nativeNumber(Math.min(99,n+10)), nativeNumber(Math.max(1,n-10))];
+}
+function buildNumberExercises(){
+  var items = [];
+  var seq = 0;
+  var sinoNote = 'Корейско-китайские числительные используются с минутами, датами, деньгами, этажами и числами от 100.';
+  var nativeNote = 'Перед счётными словами: 하나→한, 둘→두, 셋→세, 넷→네, 스물→스무.';
+  function add(system, value, kind, question, correct, candidates, note){
+    items.push({
+      question: question,
+      options: numberOptions(correct, candidates),
+      correct: String(correct),
+      note: note || '',
+      system: system,
+      value: value,
+      kind: kind,
+      id: 'num' + seq++
+    });
+  }
+  function addSinoFixed(n){
+    var reading = sinoNumber(n);
+    var readingQuestion = n === 0 ? 'Как обычно читается 0 в корейско-китайской системе при счёте и вычислениях?' : 'Как читается число ' + n + ' по корейско-китайской системе?';
+    add('sino', n, 'fixed', readingQuestion, reading, sinoReadingOptions(n), sinoNote);
+    add('sino', n, 'fixed', 'Какому числу соответствует «' + reading + '»?', String(n), numericNumberOptions(n), sinoNote);
+    if(n < 100){
+      add('sino', n, 'fixed', 'Как правильно сказать «' + n + ' минут»?', reading + ' 분', [nativeCounterNumber(n) && nativeCounterNumber(n) + ' 분', sinoNumber(n+1) + ' 분', reading + ' 시', reading + ' 개'], sinoNote);
+      if(n === 0) add('sino', n, 'fixed', 'Как правильно сказать «0 градусов»?', '영 도', ['공 도','한 도','일 도'], sinoNote);
+      else add('sino', n, 'fixed', 'Как правильно назвать ' + n + '-й этаж?', reading + ' 층', [nativeCounterNumber(n) && nativeCounterNumber(n) + ' 층', sinoNumber(n+1) + ' 층', reading + ' 시', reading + ' 개'], sinoNote);
+    } else {
+      add('sino', n, 'fixed', 'Как правильно сказать сумму «' + n + ' вон»?', reading + ' 원', [sinoNumber(n+1) + ' 원', reading + ' 개', reading + ' 시', '일' + reading + ' 원'], sinoNote);
+      add('sino', n, 'fixed', 'Как правильно сказать «' + n + ' предметов»?', reading + ' 개', [sinoNumber(n+1) + ' 개', reading + ' 원', reading + ' 시', '일' + reading + ' 개'], sinoNote);
+    }
+  }
+  function addNativeZero(){
+    add('native', 0, 'fixed', 'Есть ли отдельное исконно-корейское числительное для нуля?', 'Нет, обычно используют 영 или 공', ['Да, это 하나','Да, это 영','Да, это 공'], 'У нуля нет отдельной исконно-корейской формы: обычно используются 영 или 공.');
+    add('native', 0, 'fixed', 'Как обычно читают 0 в математике, счёте и температуре?', '영', ['공','하나','일'], '영 — обычное чтение нуля; 공 часто используется в номерах телефонов и кодах.');
+    add('native', 0, 'fixed', 'Как обычно читают цифру 0 в номере телефона?', '공', ['영','하나','십'], 'В телефонных номерах и кодах 0 обычно читается 공.');
+    add('native', 0, 'fixed', 'Как естественно сказать «нет ни одного предмета»?', '하나도 없어요', ['한 개 있어요','영 개 있어요','공 개 있어요'], 'Для значения «ни одного» естественно используется конструкция 하나도 없다.');
+  }
+  function addNativeFixed(n){
+    if(n === 0){ addNativeZero(); return; }
+    var reading = nativeNumber(n);
+    var counter = nativeCounterNumber(n);
+    add('native', n, 'fixed', 'Как читается число ' + n + ' по исконно-корейской системе?', reading, nativeReadingOptions(n), nativeNote);
+    add('native', n, 'fixed', 'Какому числу соответствует «' + reading + '»?', String(n), numericNumberOptions(n), nativeNote);
+    add('native', n, 'fixed', 'Как правильно сказать «' + n + ' предметов»?', counter + ' 개', [reading + ' 개', sinoNumber(n) + ' 개', nativeCounterNumber(Math.min(99,n+1)) + ' 개', counter + ' 분'], nativeNote);
+    var unit = n <= 12 ? '시' : '명';
+    var label = n <= 12 ? '«сейчас ' + n + ' часов»' : '«' + n + ' обычных участников»';
+    add('native', n, 'fixed', 'Как правильно сказать ' + label + '?', counter + ' ' + unit, [sinoNumber(n) + ' ' + unit, reading + ' ' + unit, nativeCounterNumber(Math.min(99,n+1)) + ' ' + unit, counter + ' 분'], nativeNote);
+  }
+  var fixed = [0,1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100,1000,10000];
+  fixed.forEach(addSinoFixed);
+  fixed.filter(function(n){ return n < 100; }).forEach(addNativeFixed);
+
+  var under100 = [13,17,24,29,35,42,47,53,68,71,76,84,89,94,99];
+  under100.forEach(function(n, i){
+    var kind = 'mixed-under-100';
+    if(i % 4 === 0) add('sino', n, kind, 'Выберите корейско-китайское чтение числа ' + n + '.', sinoNumber(n), sinoReadingOptions(n), sinoNote);
+    else if(i % 4 === 1) add('native', n, kind, 'Выберите исконно-корейское чтение числа ' + n + '.', nativeNumber(n), nativeReadingOptions(n), nativeNote);
+    else if(i % 4 === 2) add('native', n, kind, 'Как правильно сказать «' + n + ' предметов»?', nativeCounterNumber(n) + ' 개', [nativeNumber(n) + ' 개', sinoNumber(n) + ' 개', nativeCounterNumber(n+1) && nativeCounterNumber(n+1) + ' 개', nativeCounterNumber(n-1) + ' 개', nativeCounterNumber(n) + ' 분'], nativeNote);
+    else add('native', n, kind, 'Как правильно сказать «' + n + ' человек» в обычном счёте?', nativeCounterNumber(n) + ' 명', [sinoNumber(n) + ' 명', nativeNumber(n) + ' 명', nativeCounterNumber(n+1) + ' 명', nativeCounterNumber(n) + ' 분'], nativeNote);
+  });
+
+  var under1000 = [101,115,203,248,319,407,512,570,628,684,735,846,909,950,999];
+  under1000.forEach(function(n, i){
+    var reading = sinoNumber(n);
+    if(i % 3 === 0) add('sino', n, 'mixed-under-1000', 'Как читается число ' + n + '?', reading, sinoReadingOptions(n), sinoNote);
+    else if(i % 3 === 1) add('sino', n, 'mixed-under-1000', 'Какому числу соответствует «' + reading + '»?', String(n), numericNumberOptions(n), sinoNote);
+    else add('sino', n, 'mixed-under-1000', 'Как правильно сказать сумму «' + n + ' вон»?', reading + ' 원', [sinoNumber(n+1) + ' 원', reading + ' 개', reading + ' 시', '일' + reading + ' 원'], sinoNote);
+  });
+
+  var over1000 = [1001,1205,2347,5008,7340,9999,10001,12040,25890,47013,50008,68421,75090,90999,99999];
+  over1000.forEach(function(n, i){
+    var reading = sinoNumber(n);
+    if(i % 3 === 0) add('sino', n, 'mixed-over-1000', 'Как читается число ' + n + '?', reading, sinoReadingOptions(n), sinoNote);
+    else if(i % 3 === 1) add('sino', n, 'mixed-over-1000', 'Какому числу соответствует «' + reading + '»?', String(n), numericNumberOptions(n), sinoNote);
+    else add('sino', n, 'mixed-over-1000', 'Как правильно сказать сумму «' + n + ' вон»?', reading + ' 원', [sinoNumber(n+1) + ' 원', reading + ' 개', reading + ' 시', '일' + reading + ' 원'], sinoNote);
+  });
+  return items;
+}
 function qThemeType(item){ return {type:'countertype', item: item}; }
 function qThemeTranslate(item){ return {type:'countertranslate', item: item}; }
 var MIXED_THEME_FACTORIES = [qThemeCloze, qThemeType, qThemeTranslate];
@@ -374,7 +509,7 @@ function initState(){
     examSubOpen: false,
     qaSub: 'qword', // 'qword' | 'qanswer' | 'response'
     qaSubOpen: false,
-    themeSub: 'counters', // 'counters' | 'datetime' | 'honorific' | 'position'
+    themeSub: 'counters', // 'counters' | 'numbers' | 'datetime' | 'honorific' | 'position'
     themeCounterMode: 'choice', // 'choice' | 'type' | 'translate' (только для счётных слов)
     themeSubOpen: false,
     searchQuery: '',
@@ -682,7 +817,7 @@ function advanceQA(){
 }
 
 /* ============ THEME STANDALONE QUEUE ============ */
-var THEME_FACTORY = { counters: qThemeCloze, honorific: qThemeCloze, position: qThemeCloze, datetime: qThemeDate, irregular: qThemeCloze };
+var THEME_FACTORY = { counters: qThemeCloze, numbers: qThemeDate, honorific: qThemeCloze, position: qThemeCloze, datetime: qThemeDate, irregular: qThemeCloze };
 var THEME_MODE_SECTIONS = ['counters','position','irregular']; // разделы с режимами Выбор/Впишите/Переведите/Смешанный
 function themeGroupKey(item){ return item.word || item.correct; }
 function buildPerAnswerSample(items, perAnswer, groupKeyFn){
@@ -1452,7 +1587,8 @@ function renderThemeDate(q){
   });
   if(state.ui.chosen){
     out += '<div class="feedback ' + (state.ui.chosen===item.correct?'ok':'bad') + '">' +
-      (state.ui.chosen===item.correct ? 'Верно!' : ('Правильно: <span class="ans kr">'+esc(item.correct)+'</span>')) + '</div>';
+      (state.ui.chosen===item.correct ? 'Верно!' : ('Правильно: <span class="ans kr">'+esc(item.correct)+'</span>')) +
+      (item.note ? '<span class="note">' + esc(item.note) + '</span>' : '') + '</div>';
   }
   out += '</div>';
   return out;
@@ -2060,7 +2196,7 @@ function renderSearchView(){
 }
 
 function renderThemeView(){
-  var subs = [['counters','Счётные слова'],['datetime','Даты и время'],['honorific','Уважительно'],['position','Место'],['irregular','Неправильные глаголы']];
+  var subs = [['counters','Счётные слова'],['numbers','Числительные'],['datetime','Даты и время'],['honorific','Уважительно'],['position','Место'],['irregular','Неправильные глаголы']];
   var currentLabel = (subs.filter(function(s){ return s[0]===state.themeSub; })[0] || subs[0])[1];
   var html = '<div class="panel"><div class="panel-row" id="themesub-toggle"><span class="label">Тема</span>' +
     '<span class="value mono">' + esc(currentLabel) + '<span class="chev' + (state.themeSubOpen?' open':'') + '">▾</span></span></div>';
@@ -2429,6 +2565,7 @@ async function boot(){
   }));
   RAW = results[0]; GRAMMAR_TOPICS = results[1]; GRAMMAR_EXERCISES = results[2];
   EXAM_DATA = results[3]; QA_DATA = results[4]; THEME_DATA = results[5]; PHRASES_RAW = results[6];
+  THEME_DATA.numbers = buildNumberExercises();
   EXAM_DATA.listening = await fetch('data/local/listening.json')
     .then(function(r){ return r.ok ? r.json() : []; })
     .catch(function(){ return []; });
