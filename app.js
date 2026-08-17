@@ -3,7 +3,7 @@
 "use strict";
 
 /* ============ DATA ============ */
-var RAW, GRAMMAR_TOPICS, GRAMMAR_EXERCISES, EXAM_DATA, QA_DATA, THEME_DATA, PHRASES_RAW;
+var RAW, GRAMMAR_TOPICS, GRAMMAR_EXERCISES, EXAM_DATA, QA_DATA, THEME_DATA, PHRASES_RAW, WRITING_DATA;
 var EXAM_LABELS = ['가','나','다','라'];
 var ALL_WORDS, CATEGORIES, GRAMMAR_CATS, EX_CAT_MAP;
 var RELATED_BY_KR, WORDS_BY_ID;
@@ -516,6 +516,7 @@ function initState(){
     grammarTopicOpen: {}, // category -> true, раскрытые темы в справочнике
     grammarLessonOpen: {}, // lesson number -> true, раскрытые уроки в справочнике
     grammarCardMode: 'flip', // 'flip' | 'type' (только для «Карточки»)
+    examMode: 'test', // 'test' | 'writing' | 'speaking'
     examSub: 'reading', // 'reading' | 'ordering' | 'construct' | 'cloze'
     examSubOpen: false,
     qaSub: 'qword', // 'qword' | 'qanswer' | 'response'
@@ -538,6 +539,8 @@ function initState(){
       catSelected: CATEGORIES.slice(), catOpen: false },
     mockExam: { phase: 'pick', examKey: null, queue: [], index: 0,
       listeningCorrect: 0, listeningTotal: 0, readingCorrect: 0, readingTotal: 0 },
+    writingPractice: { phase: 'pick', topicKey: null, combos: [], iterIndex: 0,
+      checked: false, blankCorrect: {}, totalCorrect: 0, totalBlanks: 0, freeText: '' },
     authReady: false,
     migrationPrompt: false,
     migrationBusy: false,
@@ -1032,6 +1035,53 @@ function advanceMock(){
   state.mockExam.index++;
   if(state.mockExam.index >= state.mockExam.queue.length) state.mockExam.phase = 'done';
   else rebuildMockQuestion();
+}
+
+/* ============ WRITING PRACTICE (쓰기) ============ */
+function startWritingTopic(key){
+  var data = WRITING_DATA[key];
+  if(!data) return;
+  var combos = shuffle(data.combos.slice()).slice(0, 3);
+  state.writingPractice = { phase:'read', topicKey:key, combos:combos, iterIndex:0,
+    checked:false, blankCorrect:{}, totalCorrect:0, totalBlanks:0, freeText:'' };
+}
+function writingTopicData(){
+  return WRITING_DATA[state.writingPractice.topicKey];
+}
+function writingCurrentCombo(){
+  return state.writingPractice.combos[state.writingPractice.iterIndex] || [];
+}
+function findWritingChunkText(data, cid){
+  for(var p=0; p<data.paragraphs.length; p++){
+    for(var s=0; s<data.paragraphs[p].length; s++){
+      var seg = data.paragraphs[p][s];
+      if(seg.c === cid) return seg.t;
+    }
+  }
+  return '';
+}
+function checkWritingBlanks(){
+  var wp = state.writingPractice;
+  var data = writingTopicData();
+  var combo = writingCurrentCombo();
+  var correct = 0;
+  combo.forEach(function(cid){
+    var input = document.getElementById('wblank-' + cid);
+    var typed = input ? input.value.trim() : '';
+    var isRight = typed === findWritingChunkText(data, cid);
+    wp.blankCorrect[cid] = isRight;
+    if(isRight) correct++;
+  });
+  wp.totalCorrect += correct;
+  wp.totalBlanks += combo.length;
+  wp.checked = true;
+}
+function advanceWritingIteration(){
+  var wp = state.writingPractice;
+  wp.checked = false;
+  wp.blankCorrect = {};
+  wp.iterIndex++;
+  wp.phase = wp.iterIndex >= wp.combos.length ? 'write' : 'blank';
 }
 
 /* ============ QA STANDALONE QUEUE ============ */
@@ -2279,6 +2329,16 @@ function renderSessionView(){
 }
 
 function renderExamView(){
+  var html = '<div class="sub-toggle">' +
+    '<button data-exammode="test" class="' + (state.examMode==='test'?'active':'') + '">Тренировка тестов</button>' +
+    '<button data-exammode="writing" class="' + (state.examMode==='writing'?'active':'') + '">쓰기</button>' +
+    '<button data-exammode="speaking" class="' + (state.examMode==='speaking'?'active':'') + '">말하기</button></div>';
+  html += state.examMode === 'writing' ? renderWritingView()
+    : state.examMode === 'speaking' ? '<div class="empty"><b>Скоро</b>Задачи для 말하기 обсудим отдельно</div>'
+    : renderExamTestMode();
+  return html;
+}
+function renderExamTestMode(){
   var subs = [['reading','Чтение'],['ordering','Порядок'],['construct','Составь'],['cloze','Вставь']];
   if(EXAM_DATA.listening && EXAM_DATA.listening.length) subs.push(['listening','Аудирование']);
   if(EXAM_DATA.topikReading && EXAM_DATA.topikReading.length) subs.push(['topikReading','Чтение TOPIK']);
@@ -2340,6 +2400,97 @@ function renderMockExamView(){
   if(state.mockExam.phase === 'pick') return renderMockPick();
   if(state.mockExam.phase === 'running') return renderMockRunning();
   return renderMockDone();
+}
+
+function renderWritingParagraphsPlain(data){
+  var html = '<div class="notes kr" style="font-size:15px;line-height:1.7;margin-bottom:16px;padding:14px;background:var(--paper);border-radius:12px;max-width:none">';
+  html += data.paragraphs.map(function(para){
+    return para.map(function(seg){ return esc(seg.t); }).join('');
+  }).join('<br><br>');
+  html += '</div>';
+  return html;
+}
+function writingQuitBtn(){
+  return '<div class="controls"><button class="btn" id="writing-quit">Выйти к темам</button></div>';
+}
+function renderWritingPick(){
+  var html = '<div class="panel"><div class="meaning" style="text-align:center;font-size:19px">Выберите тему</div>';
+  html += '<div class="cat-grid open">';
+  Object.keys(WRITING_DATA).forEach(function(key){
+    html += '<div class="cat-chip" data-writingtopic="' + key + '">' + esc(WRITING_DATA[key].titleRu) + '</div>';
+  });
+  html += '</div></div>';
+  return html;
+}
+function renderWritingRead(){
+  var data = writingTopicData();
+  var html = '<div class="qcard"><div class="meaning" style="text-align:center;font-size:18px">' + esc(data.titleRu) + '</div>';
+  html += renderWritingParagraphsPlain(data);
+  html += '<div class="controls"><button class="btn btn-primary" id="writing-to-blanks">Дальше</button></div></div>';
+  html += writingQuitBtn();
+  return html;
+}
+function renderWritingBlank(){
+  var wp = state.writingPractice;
+  var data = writingTopicData();
+  var combo = writingCurrentCombo();
+  var comboSet = {};
+  combo.forEach(function(c){ comboSet[c] = true; });
+  var html = '<div class="stage-header"><span class="stage-label">Заполните пропуски</span>' +
+    '<span class="stage-count mono">Итерация ' + (wp.iterIndex+1) + ' из ' + wp.combos.length + '</span></div>';
+  html += '<div class="qcard"><div class="notes kr" style="font-size:15px;line-height:2.2;margin-bottom:10px;padding:14px;background:var(--paper);border-radius:12px;max-width:none">';
+  html += data.paragraphs.map(function(para){
+    return para.map(function(seg){
+      if(seg.c && comboSet[seg.c]){
+        var cls = 'wblank-input' + (wp.checked ? (wp.blankCorrect[seg.c] ? ' ok' : ' bad') : '');
+        return '<input class="' + cls + '" id="wblank-' + seg.c + '" autocomplete="off"' + (wp.checked?' disabled':'') + '/>';
+      }
+      return esc(seg.t);
+    }).join('');
+  }).join('<br><br>');
+  html += '</div>';
+  if(wp.checked){
+    var wrongList = combo.filter(function(cid){ return !wp.blankCorrect[cid]; });
+    html += wrongList.length
+      ? '<div class="feedback bad">Правильно: ' + wrongList.map(function(cid){ return esc(findWritingChunkText(data, cid)); }).join(' · ') + '</div>'
+      : '<div class="feedback ok">Всё верно!</div>';
+    html += '<div class="controls"><button class="btn btn-primary" id="writing-next-iter">Дальше</button></div>';
+  } else {
+    html += '<div class="controls"><button class="btn btn-primary" id="writing-check-blanks">Проверить</button></div>';
+  }
+  html += '</div>';
+  html += writingQuitBtn();
+  return html;
+}
+function renderWritingWrite(){
+  var data = writingTopicData();
+  var html = '<div class="qcard"><div class="meaning" style="text-align:center;font-size:18px">Напишите текст полностью</div>';
+  html += '<div class="notes" style="text-align:center;margin-bottom:14px">Тема: ' + esc(data.titleRu) + '</div>';
+  html += '<textarea class="writing-textarea kr" id="writing-free-input" placeholder="여기에 쓰세요...">' + esc(state.writingPractice.freeText||'') + '</textarea>';
+  html += '<div class="controls" style="margin-top:12px"><button class="btn btn-primary" id="writing-compare">Сравнить с оригиналом</button></div></div>';
+  html += writingQuitBtn();
+  return html;
+}
+function renderWritingDone(){
+  var data = writingTopicData();
+  var wp = state.writingPractice;
+  var html = '<div class="qcard"><div class="meaning" style="text-align:center;font-size:19px;margin-bottom:14px">Готово!</div>';
+  html += '<div class="summary-row"><span>Пропуски угаданы</span><span class="val">' + wp.totalCorrect + ' / ' + wp.totalBlanks + '</span></div>';
+  html += '<div class="notes" style="margin-top:16px"><b>Ваш текст:</b></div>';
+  html += '<div class="notes kr" style="white-space:pre-wrap;margin-top:6px">' + esc(wp.freeText || '(пусто)') + '</div>';
+  html += '<div class="notes" style="margin-top:16px"><b>Оригинал:</b></div>';
+  html += renderWritingParagraphsPlain(data);
+  html += '<div class="controls"><button class="btn" id="writing-restart-same">Ещё раз (эта тема)</button>' +
+    '<button class="btn btn-primary" id="writing-back-pick">Выбрать другую тему</button></div></div>';
+  return html;
+}
+function renderWritingView(){
+  var wp = state.writingPractice;
+  if(wp.phase === 'pick') return renderWritingPick();
+  if(wp.phase === 'read') return renderWritingRead();
+  if(wp.phase === 'blank') return renderWritingBlank();
+  if(wp.phase === 'write') return renderWritingWrite();
+  return renderWritingDone();
 }
 
 function renderQAView(){
@@ -2808,6 +2959,10 @@ function attachHandlers(){
   var reshuffleGC = document.getElementById('reshuffle-gramcards');
   if(reshuffleGC) reshuffleGC.onclick = function(){ resetGrammarCardsQueue(); render(); };
 
+  document.querySelectorAll('[data-exammode]').forEach(function(el){
+    el.onclick = function(){ state.examMode = el.getAttribute('data-exammode'); render(); };
+  });
+
   // exam sub-tabs
   document.querySelectorAll('.cat-chip[data-examsub]').forEach(function(el){
     el.onclick = function(){ state.examSub = el.getAttribute('data-examsub'); state.examSubOpen = false; resetExamQueue(); render(); };
@@ -2824,6 +2979,31 @@ function attachHandlers(){
   if(mockQuit) mockQuit.onclick = function(){ state.mockExam.phase = 'pick'; render(); };
   var mockRestart = document.getElementById('mock-restart');
   if(mockRestart) mockRestart.onclick = function(){ state.mockExam.phase = 'pick'; render(); };
+
+  document.querySelectorAll('[data-writingtopic]').forEach(function(el){
+    el.onclick = function(){ startWritingTopic(el.getAttribute('data-writingtopic')); render(); };
+  });
+  var writingToBlanks = document.getElementById('writing-to-blanks');
+  if(writingToBlanks) writingToBlanks.onclick = function(){ state.writingPractice.phase = 'blank'; render(); };
+  var writingCheckBlanks = document.getElementById('writing-check-blanks');
+  if(writingCheckBlanks) writingCheckBlanks.onclick = function(){ checkWritingBlanks(); render(); };
+  var writingNextIter = document.getElementById('writing-next-iter');
+  if(writingNextIter) writingNextIter.onclick = function(){ advanceWritingIteration(); render(); };
+  var writingCompare = document.getElementById('writing-compare');
+  if(writingCompare){
+    writingCompare.onclick = function(){
+      var ta = document.getElementById('writing-free-input');
+      state.writingPractice.freeText = ta ? ta.value : '';
+      state.writingPractice.phase = 'done';
+      render();
+    };
+  }
+  var writingRestartSame = document.getElementById('writing-restart-same');
+  if(writingRestartSame) writingRestartSame.onclick = function(){ startWritingTopic(state.writingPractice.topicKey); render(); };
+  var writingBackPick = document.getElementById('writing-back-pick');
+  if(writingBackPick) writingBackPick.onclick = function(){ state.writingPractice.phase = 'pick'; render(); };
+  var writingQuit = document.getElementById('writing-quit');
+  if(writingQuit) writingQuit.onclick = function(){ state.writingPractice.phase = 'pick'; render(); };
 
   // qa sub-tabs
   document.querySelectorAll('.cat-chip[data-qasub]').forEach(function(el){
@@ -2950,12 +3130,13 @@ function attachHandlers(){
 
 async function boot(){
   var files = ['data/words.json','data/grammar.json','data/grammar-exercises.json',
-               'data/exam.json','data/qa.json','data/theme.json','data/phrases.json'];
+               'data/exam.json','data/qa.json','data/theme.json','data/phrases.json','data/writing.json'];
   var results = await Promise.all(files.map(function(f){
     return fetch(f).then(function(r){ return r.json(); });
   }));
   RAW = results[0]; GRAMMAR_TOPICS = results[1]; GRAMMAR_EXERCISES = results[2];
   EXAM_DATA = results[3]; QA_DATA = results[4]; THEME_DATA = results[5]; PHRASES_RAW = results[6];
+  WRITING_DATA = results[7];
   THEME_DATA.numbers = buildNumberExercises();
   EXAM_DATA.listening = await fetch('data/local/listening.json')
     .then(function(r){ return r.ok ? r.json() : []; })
