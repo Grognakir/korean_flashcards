@@ -2927,13 +2927,9 @@ async function boot(){
   }
   if(window.LearningSync) await window.LearningSync.ready;
   state.authReady = true;
-  if(window.LearningSync && window.LearningSync.isConfigured()){
-    if(window.LearningSync.isLoggedIn()){
-      if(window.LearningSync.needsMigrationPrompt()) state.migrationPrompt = true;
-      else if(window.AuthUI) window.AuthUI.hide();
-    } else if(window.AuthUI) {
-      window.AuthUI.show('login');
-    }
+  if(window.LearningSync && window.LearningSync.isConfigured() && window.LearningSync.isLoggedIn()){
+    if(window.LearningSync.needsMigrationPrompt()) state.migrationPrompt = true;
+    else if(window.AuthUI) window.AuthUI.hide();
   }
   loadProgress();
 }

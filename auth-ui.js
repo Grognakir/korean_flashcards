@@ -41,8 +41,8 @@ function injectStyles(){
     + '.auth-submit:disabled{ opacity:0.6; cursor:default; }'
     + '.auth-header{ display:grid; grid-template-columns:30px 1fr 30px; align-items:center; margin-bottom:18px; }'
     + '.auth-header .auth-title{ margin-bottom:0; }'
-    + '.auth-back{ width:30px; height:30px; border-radius:50%; border:1px solid var(--line); background:var(--paper); color:var(--stone); font-size:15px; line-height:1; cursor:pointer; }'
-    + '.auth-back:hover{ color:var(--ink); border-color:var(--stone); }'
+    + '.auth-back{ width:30px; height:30px; border:none; background:none; color:var(--stone); font-size:20px; line-height:1; cursor:pointer; justify-self:start; }'
+    + '.auth-back:hover{ color:var(--ink); }'
     + '.auth-back:disabled{ opacity:0.5; cursor:default; }'
     + '@media (max-width:420px){ .auth-card{ max-width:100%; } }';
   var tag = document.createElement('style');
