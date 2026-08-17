@@ -128,6 +128,8 @@ header{ display:flex; align-items:center; justify-content:space-between; margin-
 .dialogue-line{ margin-bottom:10px; }
 .dialogue-line b{ color:var(--blue); }
 .dialogue-note{ text-align:center; font-style:italic; color:var(--stone); font-size:13px; margin:8px 0; }
+.dialogue-reveal{ animation: dialogueReveal .45s ease; }
+@keyframes dialogueReveal{ from{ filter:blur(10px); opacity:0; } to{ filter:blur(0); opacity:1; } }
 
 .controls{ display:flex; gap:10px; margin-top:14px; }
 .btn{ flex:1; padding:13px; border-radius:14px; border:none; font-weight:700; font-size:14px; cursor:pointer; }

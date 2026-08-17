@@ -543,7 +543,7 @@ function initState(){
       checked: false, blankCorrect: {}, totalCorrect: 0, totalBlanks: 0, freeText: '' },
     speakingPractice: { phase: 'pick', topicId: null, iterIndex: 0,
       checked: false, blankCorrect: {}, totalCorrect: 0, totalBlanks: 0 },
-    listeningPractice: { phase: 'pick', topicId: null },
+    listeningPractice: { phase: 'pick', topicId: null, textShown: false },
     authReady: false,
     migrationPrompt: false,
     migrationBusy: false,
@@ -1145,7 +1145,7 @@ function findListeningTopic(topicId){
 }
 function startListeningTopic(topicId){
   if(!findListeningTopic(topicId)) return;
-  state.listeningPractice = { phase:'show', topicId:topicId };
+  state.listeningPractice = { phase:'show', topicId:topicId, textShown:false };
 }
 
 /* ============ QA STANDALONE QUEUE ============ */
@@ -2483,14 +2483,14 @@ function renderWritingPick(){
   var html = '<div class="panel"><div class="meaning" style="text-align:center;font-size:19px">Выберите тему</div>';
   html += '<div class="cat-grid open">';
   Object.keys(WRITING_DATA).forEach(function(key){
-    html += '<div class="cat-chip" data-writingtopic="' + key + '">' + esc(WRITING_DATA[key].titleRu) + '</div>';
+    html += '<div class="cat-chip" data-writingtopic="' + key + '">' + esc(WRITING_DATA[key].titleKr) + ' (' + esc(WRITING_DATA[key].titleRu) + ')</div>';
   });
   html += '</div></div>';
   return html;
 }
 function renderWritingRead(){
   var data = writingTopicData();
-  var html = '<div class="qcard"><div class="meaning" style="text-align:center;font-size:18px">' + esc(data.titleRu) + '</div>';
+  var html = '<div class="qcard"><div class="meaning" style="text-align:center;font-size:18px">' + esc(data.titleKr) + ' (' + esc(data.titleRu) + ')</div>';
   html += renderWritingParagraphsPlain(data);
   html += '<div class="controls"><button class="btn btn-primary" id="writing-to-blanks">Дальше</button></div></div>';
   html += writingQuitBtn();
@@ -2531,7 +2531,7 @@ function renderWritingBlank(){
 function renderWritingWrite(){
   var data = writingTopicData();
   var html = '<div class="qcard"><div class="meaning" style="text-align:center;font-size:18px">Напишите текст полностью</div>';
-  html += '<div class="notes" style="text-align:center;margin-bottom:14px">Тема: ' + esc(data.titleRu) + '</div>';
+  html += '<div class="notes" style="text-align:center;margin-bottom:14px">Тема: ' + esc(data.titleKr) + ' (' + esc(data.titleRu) + ')</div>';
   html += '<textarea class="writing-textarea kr" id="writing-free-input" placeholder="여기에 쓰세요...">' + esc(state.writingPractice.freeText||'') + '</textarea>';
   html += '<div class="controls" style="margin-top:12px"><button class="btn btn-primary" id="writing-compare">Сравнить с оригиналом</button></div></div>';
   html += writingQuitBtn();
@@ -2588,7 +2588,7 @@ function renderSpeakingPick(){
   html += '<div class="cat-grid open">';
   CURRICULUM_DATA.lessons.forEach(function(lesson){
     lesson.speaking.forEach(function(sp){
-      html += '<div class="cat-chip" data-speakingtopic="' + esc(sp.id) + '">Урок ' + lesson.num + ' — ' + esc(sp.titleRu) + '</div>';
+      html += '<div class="cat-chip" data-speakingtopic="' + esc(sp.id) + '">' + lesson.num + '과 ' + esc(sp.titleKr) + ' (' + esc(sp.titleRu) + ')</div>';
     });
   });
   html += '</div></div>';
@@ -2597,7 +2597,7 @@ function renderSpeakingPick(){
 function renderSpeakingRead(){
   var found = findSpeakingTopic(state.speakingPractice.topicId);
   if(!found) return '<div class="empty">Тема не найдена</div>';
-  var html = '<div class="qcard"><div class="meaning" style="text-align:center;font-size:18px">Урок ' + found.lesson.num + ' — ' + esc(found.topic.titleRu) + '</div>';
+  var html = '<div class="qcard"><div class="meaning" style="text-align:center;font-size:18px">' + found.lesson.num + '과 ' + esc(found.topic.titleKr) + ' (' + esc(found.topic.titleRu) + ')</div>';
   html += renderDialogueLines(found.topic.lines, null, false, {});
   html += '<div class="controls"><button class="btn btn-primary" id="speaking-to-blanks">Дальше</button></div></div>';
   html += speakingQuitBtn();
@@ -2631,7 +2631,7 @@ function renderSpeakingReread(){
   var sp = state.speakingPractice;
   var found = findSpeakingTopic(sp.topicId);
   if(!found) return '<div class="empty">Тема не найдена</div>';
-  var html = '<div class="qcard"><div class="meaning" style="text-align:center;font-size:18px">Урок ' + found.lesson.num + ' — ' + esc(found.topic.titleRu) + '</div>';
+  var html = '<div class="qcard"><div class="meaning" style="text-align:center;font-size:18px">' + found.lesson.num + '과 ' + esc(found.topic.titleKr) + ' (' + esc(found.topic.titleRu) + ')</div>';
   html += '<div class="summary-row"><span>Пропуски угаданы</span><span class="val">' + sp.totalCorrect + ' / ' + sp.totalBlanks + '</span></div>';
   html += renderDialogueLines(found.topic.lines, null, false, {});
   html += '<div class="controls"><button class="btn" id="speaking-restart-same">Ещё раз (эта тема)</button>' +
@@ -2650,17 +2650,23 @@ function renderListeningPick(){
   var html = '<div class="panel"><div class="meaning" style="text-align:center;font-size:19px">Выберите тему</div>';
   html += '<div class="cat-grid open">';
   CURRICULUM_DATA.lessons.forEach(function(lesson){
-    html += '<div class="cat-chip" data-listeningtopic="' + esc(lesson.listening.id) + '">Урок ' + lesson.num + ' — ' + esc(lesson.listening.titleRu) + '</div>';
+    html += '<div class="cat-chip" data-listeningtopic="' + esc(lesson.listening.id) + '">' + lesson.num + '과 ' + esc(lesson.titleKr) + ' (' + esc(lesson.listening.titleRu) + ')</div>';
   });
   html += '</div></div>';
   return html;
 }
 function renderListeningShow(){
-  var found = findListeningTopic(state.listeningPractice.topicId);
+  var lp = state.listeningPractice;
+  var found = findListeningTopic(lp.topicId);
   if(!found) return '<div class="empty">Тема не найдена</div>';
-  var html = '<div class="qcard"><div class="meaning" style="text-align:center;font-size:18px">Урок ' + found.lesson.num + ' — ' + esc(found.topic.titleRu) + '</div>';
-  html += '<audio controls preload="none" style="width:100%;margin-bottom:16px" src="' + esc(encodeURI(found.topic.audio)) + '"></audio>';
-  html += renderDialogueLines(found.topic.lines, null, false, {});
+  var html = '<div class="qcard"><div class="meaning" style="text-align:center;font-size:18px">' + found.lesson.num + '과 ' + esc(found.lesson.titleKr) + ' (' + esc(found.topic.titleRu) + ')</div>';
+  html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">';
+  html += '<audio controls preload="none" style="flex:1;min-width:0" src="' + esc(encodeURI(found.topic.audio)) + '"></audio>';
+  html += '<button class="btn" id="listening-toggle-text">' + (lp.textShown ? 'Скрыть текст' : 'Показать текст') + '</button>';
+  html += '</div>';
+  if(lp.textShown){
+    html += '<div class="dialogue-reveal">' + renderDialogueLines(found.topic.lines, null, false, {}) + '</div>';
+  }
   html += '<div class="controls"><button class="btn btn-primary" id="listening-back-pick">Выбрать другой урок</button></div></div>';
   return html;
 }
@@ -3202,6 +3208,8 @@ function attachHandlers(){
   });
   var listeningBackPick = document.getElementById('listening-back-pick');
   if(listeningBackPick) listeningBackPick.onclick = function(){ state.listeningPractice.phase = 'pick'; render(); };
+  var listeningToggleText = document.getElementById('listening-toggle-text');
+  if(listeningToggleText) listeningToggleText.onclick = function(){ state.listeningPractice.textShown = !state.listeningPractice.textShown; render(); };
 
   // qa sub-tabs
   document.querySelectorAll('.cat-chip[data-qasub]').forEach(function(el){
