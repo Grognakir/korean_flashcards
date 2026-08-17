@@ -2434,7 +2434,14 @@ function searchWords(query){
     if(score !== -1) results.push({w: w, score: score});
   });
   results.sort(function(a,b){ return a.score - b.score || a.w.kr.length - b.w.kr.length; });
-  return results.map(function(r){ return r.w; });
+  var mapped = results.map(function(r){ return r.w; });
+  var byKr = {};
+  mapped.forEach(function(w){ (byKr[w.kr] = byKr[w.kr] || []).push(w); });
+  return mapped.filter(function(w){
+    var group = byKr[w.kr];
+    if(group.length < 2 || !/^Неправильные/.test(w.category)) return true;
+    return !group.some(function(x){ return !/^Неправильные/.test(x.category); });
+  });
 }
 function renderSearchResult(w){
   var out = '<div class="search-item">';
