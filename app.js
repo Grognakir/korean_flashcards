@@ -722,7 +722,7 @@ function recordFsrsAnswer(question, isCorrect, meta){
   if(state.view === 'session'){
     window.LearningSync.recordSessionAttempt(key, isCorrect, meta);
   } else {
-    window.LearningSync.recordStandaloneReview(key, isCorrect, meta).catch(function(){});
+    window.LearningSync.recordStandaloneReview(key, isCorrect, meta).then(render).catch(function(){});
   }
 }
 function flushSessionFsrs(){
@@ -1315,7 +1315,7 @@ function advanceSession(){
       state.session.phaseIdx++;
       if(state.session.phaseIdx >= state.session.phases.length){
         state.session.phase = 'done';
-        flushSessionFsrs();
+        flushSessionFsrs().then(render);
       } else {
         var nextPhase = state.session.phases[state.session.phaseIdx];
         state.session.mq = { items: nextPhase.items.slice(), idx: 0 };
@@ -1337,7 +1337,7 @@ function advanceSession(){
       clearRetryContext('session');
       if(state.session.stageIdx >= state.session.stages.length){
         state.session.phase = 'done';
-        flushSessionFsrs();
+        flushSessionFsrs().then(render);
       }
     }
   }
@@ -2557,7 +2557,14 @@ function render(){
     '<path d="M20 1 A19 19 0 0 1 20 39 A9.5 9.5 0 0 1 20 20 A9.5 9.5 0 0 0 20 1 Z" fill="#C23B34"/>' +
     '<path d="M20 39 A19 19 0 0 1 20 1 A9.5 9.5 0 0 1 20 20 A9.5 9.5 0 0 0 20 39 Z" fill="#1F4E8C"/></svg>' +
     '<div><h1>단어장 — Тренажёр</h1><div class="sub mono">' + s.total + ' слов · ' + GRAMMAR_EXERCISES.length + ' упражнений грамматики</div></div></div>';
-  html += '<div class="header-actions"><div class="stats-pill"><span class="dot" style="background:#4C7A5E"></span><b>' + s.known + '</b><span class="dot" style="background:#B4802A"></span><b>' + s.learning + '</b></div>';
+  var isFsrsActive = window.LearningSync && window.LearningSync.isLoggedIn();
+  html += '<div class="header-actions"><div class="stats-pill">'
+    + (isFsrsActive
+      ? '<span class="dot" style="background:#B4802A"></span><b>' + s.newCount + '</b>'
+        + '<span class="dot" style="background:#4C7A5E"></span><b>' + s.known + '</b>'
+        + '<span class="dot" style="background:#1F4E8C"></span><b>' + s.dueToday + '</b>'
+      : '<span class="dot" style="background:#4C7A5E"></span><b>' + s.known + '</b><span class="dot" style="background:#B4802A"></span><b>' + s.learning + '</b>')
+    + '</div>';
   if(window.LearningSync && window.LearningSync.isConfigured()){
     if(window.LearningSync.isLoggedIn()){
       html += '<div class="user-menu">'
