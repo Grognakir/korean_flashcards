@@ -541,6 +541,7 @@ function initState(){
     authReady: false,
     migrationPrompt: false,
     migrationBusy: false,
+    userMenuOpen: false,
     retry: { steps: {}, pending: {}, active: {} },
     player: { queue: [], index: 0, mockcurrent: null },
     ui: {} // ephemeral per-question ui state (flipped, chosen, typedValue, typedResult)
@@ -2559,14 +2560,17 @@ function render(){
   html += '<div class="header-actions"><div class="stats-pill"><span class="dot" style="background:#4C7A5E"></span><b>' + s.known + '</b><span class="dot" style="background:#B4802A"></span><b>' + s.learning + '</b></div>';
   if(window.LearningSync && window.LearningSync.isConfigured()){
     if(window.LearningSync.isLoggedIn()){
-      html += '<span class="header-user">' + esc(authUsernameDisplay()) + '</span>'
-        + '<button class="header-login-btn" id="header-logout-btn">Выйти</button>';
+      html += '<div class="user-menu">'
+        + '<button class="header-login-btn" id="user-menu-toggle">' + esc(authUsernameDisplay()) + '</button>';
+      if(state.userMenuOpen){
+        html += '<div class="user-menu-dropdown"><button type="button" id="header-logout-btn">Выйти</button></div>';
+      }
+      html += '</div>';
     } else {
       html += '<button class="header-login-btn" id="header-login-btn">Войти</button>';
     }
   }
   html += '</div></header>';
-  if(window.LearningSync && window.LearningSync.isLoggedIn()) html += renderFsrsStats(s, 'Словарь');
   html += renderTopNav();
 
   if(state.loaded){
@@ -2605,8 +2609,10 @@ function attachHandlers(){
   if(loginBtn) loginBtn.onclick = function(){
     if(window.AuthUI) window.AuthUI.show('login');
   };
+  var userMenuToggle = document.getElementById('user-menu-toggle');
+  if(userMenuToggle) userMenuToggle.onclick = function(){ state.userMenuOpen = !state.userMenuOpen; render(); };
   var logoutBtn = document.getElementById('header-logout-btn');
-  if(logoutBtn) logoutBtn.onclick = function(){ handleAuthLogout(); };
+  if(logoutBtn) logoutBtn.onclick = function(){ state.userMenuOpen = false; handleAuthLogout(); };
   var migImport = document.getElementById('migration-import');
   if(migImport) migImport.onclick = function(){ handleMigration('import'); };
   var migFresh = document.getElementById('migration-fresh');
