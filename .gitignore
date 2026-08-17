@@ -1,5 +1,6 @@
 .DS_Store
 dev_docs/env-vars.txt
+supabase-config.local.js
 data/local/listening.json
 data/local/audio/
 references/

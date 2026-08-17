@@ -538,6 +538,9 @@ function initState(){
       catSelected: CATEGORIES.slice(), catOpen: false },
     mockExam: { phase: 'pick', examKey: null, queue: [], index: 0,
       listeningCorrect: 0, listeningTotal: 0, readingCorrect: 0, readingTotal: 0 },
+    authReady: false,
+    migrationPrompt: false,
+    migrationBusy: false,
     retry: { steps: {}, pending: {}, active: {} },
     player: { queue: [], index: 0, mockcurrent: null },
     ui: {} // ephemeral per-question ui state (flipped, chosen, typedValue, typedResult)
@@ -686,6 +689,9 @@ function loadProgress(){
     if(raw) state.progress = JSON.parse(raw);
   }catch(e){}
   loadExcluded();
+  if(window.LearningSync && window.LearningSync.isLoggedIn()){
+    window.LearningSync.syncLocalProgressMap(state.progress);
+  }
   state.loaded = true;
   resetWordsQueue();
   resetGrammarQueue();
@@ -697,12 +703,135 @@ function loadProgress(){
 }
 function saveProgress(){ try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state.progress)); }catch(e){} }
 function markWord(id, status){ state.progress[id] = status; saveProgress(); }
+function authUsernameDisplay(){
+  if(!window.LearningSync) return '';
+  var p = window.LearningSync.getProfile();
+  return p && p.username ? p.username : '';
+}
+function fsrsContextForView(){
+  if(state.view === 'theme') return { themeSub: state.themeSub };
+  return {};
+}
+function recordFsrsAnswer(question, isCorrect, meta){
+  if(!window.LearningSync || !window.LearningSync.isLoggedIn()) return;
+  if(!window.LearningSync.isProgressQuestion(question)) return;
+  meta = meta || {};
+  var key = window.LearningSync.learningItemKey(question, fsrsContextForView());
+  if(!key) return;
+  if(state.view === 'session'){
+    window.LearningSync.recordSessionAttempt(key, isCorrect, meta);
+  } else {
+    window.LearningSync.recordStandaloneReview(key, isCorrect, meta).catch(function(){});
+  }
+}
+function flushSessionFsrs(){
+  if(!window.LearningSync || !window.LearningSync.isLoggedIn()) return Promise.resolve();
+  return window.LearningSync.flushSessionReviews().then(function(){
+    window.LearningSync.syncLocalProgressMap(state.progress);
+    saveProgress();
+  }).catch(function(e){
+    console.warn('Session FSRS flush failed:', e);
+  });
+}
 function statsOverall(){
+  if(window.LearningSync && window.LearningSync.isLoggedIn()){
+    var pool = ALL_WORDS.filter(function(w){ return !state.excluded[w.id]; });
+    var st = window.LearningSync.computeStats(pool, function(w){ return 'word:' + w.id; });
+    return {
+      total: st.total,
+      known: st.mastered,
+      learning: st.learning + st.newCount,
+      newCount: st.newCount,
+      dueToday: st.dueToday,
+      mastered: st.mastered,
+      nextDueAt: st.nextDueAt
+    };
+  }
   var known=0, learning=0;
   Object.keys(state.progress).forEach(function(k){
     if(state.progress[k]==='known') known++; else if(state.progress[k]==='learning') learning++;
   });
   return {total: ALL_WORDS.length, known: known, learning: learning};
+}
+function renderFsrsStats(stats, label){
+  if(!window.LearningSync || !window.LearningSync.isLoggedIn()) return '';
+  var html = '<div class="fsrs-stats">';
+  if(label) html += '<span class="fsrs-stat">' + esc(label) + '</span>';
+  html += '<span class="fsrs-stat">новые: <b>' + (stats.newCount || 0) + '</b></span>';
+  html += '<span class="fsrs-stat">изучаются: <b>' + stats.learning + '</b></span>';
+  html += '<span class="fsrs-stat">к повторению: <b>' + (stats.dueToday || 0) + '</b></span>';
+  html += '<span class="fsrs-stat">освоены: <b>' + (stats.mastered != null ? stats.mastered : stats.known) + '</b></span>';
+  if(stats.nextDueAt){
+    html += '<span class="fsrs-stat">след. повторение: <b class="mono">' + esc(new Date(stats.nextDueAt).toISOString().slice(0, 10)) + '</b></span>';
+  }
+  html += '</div>';
+  return html;
+}
+function renderMigrationOverlay(){
+  if(!state.migrationPrompt) return '';
+  return '<div class="migration-overlay"><div class="migration-card qcard">'
+    + '<h2>Локальный прогресс найден</h2>'
+    + '<p>На этом устройстве уже есть сохранённые слова (<code>progress-v2</code>). Перенести их в аккаунт или начать с чистого списка?</p>'
+    + '<div class="migration-actions">'
+    + '<button class="btn btn-primary" id="migration-import"' + (state.migrationBusy ? ' disabled' : '') + '>Перенести локальный прогресс в аккаунт</button>'
+    + '<button class="btn" id="migration-fresh"' + (state.migrationBusy ? ' disabled' : '') + '>Начать с чистого аккаунта</button>'
+    + '</div>'
+    + (state.migrationBusy ? '<div class="hint" style="margin-top:10px">Перенос…</div>' : '')
+    + '</div></div>';
+}
+async function handleAuthLogin(data){
+  if(!window.AuthUI || !window.LearningSync) return;
+  window.AuthUI.setLoading(true);
+  window.AuthUI.clearError();
+  try{
+    await window.LearningSync.signIn(data.username, data.password);
+    if(window.LearningSync.needsMigrationPrompt()) state.migrationPrompt = true;
+    window.AuthUI.hide();
+    loadProgress();
+    window.LearningSync.syncLocalProgressMap(state.progress);
+    render();
+  }catch(e){
+    window.AuthUI.setError(e.message || 'Не удалось войти');
+  }
+  window.AuthUI.setLoading(false);
+}
+async function handleAuthRegister(data){
+  if(!window.AuthUI || !window.LearningSync) return;
+  window.AuthUI.setLoading(true);
+  window.AuthUI.clearError();
+  try{
+    await window.LearningSync.signUp(data.username, data.password);
+    if(window.LearningSync.needsMigrationPrompt()) state.migrationPrompt = true;
+    window.AuthUI.hide();
+    loadProgress();
+    window.LearningSync.syncLocalProgressMap(state.progress);
+    render();
+  }catch(e){
+    window.AuthUI.setError(e.message || 'Не удалось зарегистрироваться');
+  }
+  window.AuthUI.setLoading(false);
+}
+async function handleAuthLogout(){
+  if(window.LearningSync) await window.LearningSync.signOut();
+  state.migrationPrompt = false;
+  if(window.AuthUI) window.AuthUI.show('login');
+  render();
+}
+async function handleMigration(mode){
+  if(!window.LearningSync || state.migrationBusy) return;
+  state.migrationBusy = true;
+  render();
+  try{
+    await window.LearningSync.migrateLocalProgress({ mode: mode });
+    state.migrationPrompt = false;
+    window.LearningSync.syncLocalProgressMap(state.progress);
+    saveProgress();
+  }catch(e){
+    console.warn('Migration failed:', e);
+  }
+  state.migrationBusy = false;
+  if(window.AuthUI) window.AuthUI.hide();
+  render();
 }
 
 /* ============ WORDS STANDALONE QUEUE ============ */
@@ -772,7 +901,13 @@ function advancePhrasesStandalone(){
 function resetGrammarQueue(){
   clearRetryContext('grammar');
   var filtered = GRAMMAR_EXERCISES.filter(function(e){ return state.grammarSelected.indexOf(exCatFull(e)) !== -1; });
-  var pool = buildPerAnswerSample(filtered, 5, function(e){ return e.pattern; });
+  var samplePool = buildPerAnswerSample(filtered, 5, function(e){ return e.pattern; });
+  var pool = samplePool;
+  if(window.LearningSync && window.LearningSync.isLoggedIn()){
+    pool = window.LearningSync.selectFromPool(samplePool, Math.min(samplePool.length, 50), function(e){
+      return 'grammar:' + (e.pattern || e.id);
+    });
+  }
   state.player.gwords = pool;
   state.player.gindex = 0;
   rebuildGrammarQuestion();
@@ -793,7 +928,13 @@ function resetGrammarCardsQueue(){
   GRAMMAR_TOPICS.forEach(function(t){
     if(state.grammarSelected.indexOf(t.category) !== -1) items = items.concat(t.items);
   });
-  state.player.gcwords = shuffle(items);
+  var pool = items;
+  if(window.LearningSync && window.LearningSync.isLoggedIn()){
+    pool = window.LearningSync.selectFromPool(items, items.length, function(it){ return 'grammar:' + it.pattern; });
+  } else {
+    pool = shuffle(items);
+  }
+  state.player.gcwords = pool;
   state.player.gcindex = 0;
   rebuildGrammarCardsQuestion();
 }
@@ -963,7 +1104,14 @@ function resetThemeQueue(){
     var groupKeyFn = state.themeSub === 'irregular' ? themeGroupKey : function(item){ return item.correct; };
     pool = ensurePairedItems(basePool, buildPerAnswerSample(basePool, 2, groupKeyFn), groupKeyFn);
   } else {
-    pool = shuffle(basePool);
+    pool = basePool.slice();
+  }
+  if(window.LearningSync && window.LearningSync.isLoggedIn()){
+    pool = window.LearningSync.selectFromPool(pool, pool.length, function(item){
+      return 'theme:' + state.themeSub + ':' + (item.id || item.pattern || item.correct);
+    });
+  } else if(THEME_MODE_SECTIONS.indexOf(state.themeSub) === -1) {
+    pool = shuffle(pool);
   }
   state.player.thwords = pool;
   state.player.thindex = 0;
@@ -1077,10 +1225,17 @@ function computeStatsList(phases){
 
 function startSession(){
   clearRetryContext('session');
+  if(window.LearningSync) window.LearningSync.clearSessionBuffer();
   var allowedCategories = state.session.mode === 'lesson' ? categoriesForLessons(state.session.lessonSelected) : state.session.catSelected;
   var categoryPool = ALL_WORDS.filter(function(w){ return allowedCategories.indexOf(w.category) !== -1 && !state.excluded[w.id]; });
-  var pool = shuffle(categoryPool);
-  var wordSet = orderWithPairsAdjacent(expandWithPairs(pool.slice(0, state.session.size), categoryPool));
+  var wordSet;
+  if(window.LearningSync && window.LearningSync.isLoggedIn()){
+    var picked = window.LearningSync.selectFromPool(categoryPool, state.session.size, function(w){ return 'word:' + w.id; });
+    wordSet = orderWithPairsAdjacent(expandWithPairs(picked, categoryPool));
+  } else {
+    var pool = shuffle(categoryPool);
+    wordSet = orderWithPairsAdjacent(expandWithPairs(pool.slice(0, state.session.size), categoryPool));
+  }
   state.session.wordSet = wordSet;
 
   if(state.session.orderMode === 'mixed'){
@@ -1159,6 +1314,7 @@ function advanceSession(){
       state.session.phaseIdx++;
       if(state.session.phaseIdx >= state.session.phases.length){
         state.session.phase = 'done';
+        flushSessionFsrs();
       } else {
         var nextPhase = state.session.phases[state.session.phaseIdx];
         state.session.mq = { items: nextPhase.items.slice(), idx: 0 };
@@ -1180,15 +1336,19 @@ function advanceSession(){
       clearRetryContext('session');
       if(state.session.stageIdx >= state.session.stages.length){
         state.session.phase = 'done';
+        flushSessionFsrs();
       }
     }
   }
   render();
 }
 function restartSessionSetup(){
-  clearRetryContext('session');
-  state.session.phase = 'setup';
-  render();
+  flushSessionFsrs().finally(function(){
+    clearRetryContext('session');
+    if(window.LearningSync) window.LearningSync.clearSessionBuffer();
+    state.session.phase = 'setup';
+    render();
+  });
 }
 
 /* ============ GENERIC ANSWER HANDLERS ============ */
@@ -1221,6 +1381,7 @@ function handleCardRate(status){
   if(!q || q.type !== 'card') return;
   markWord(q.word.id, status);
   var isCorrect = status === 'known';
+  recordFsrsAnswer(q, isCorrect, { context: state.view });
   if(state.view === 'session') sessionAnswered(isCorrect);
   recordPracticeAnswer(q, isCorrect);
   goNextAfterAnswer();
@@ -1228,6 +1389,7 @@ function handleCardRate(status){
 function handleGrammarCardRate(isCorrect){
   var q = getActiveQuestion();
   if(!q || q.type !== 'gramcard') return;
+  recordFsrsAnswer(q, isCorrect, { context: 'gramcards' });
   recordPracticeAnswer(q, isCorrect);
   goNextAfterAnswer();
 }
@@ -1265,6 +1427,7 @@ function handleChoice(optValue){
      q.type !== 'exorder' && q.type !== 'excloze' &&
      q.type !== 'qword' && q.type !== 'qanswer' && q.type !== 'response' &&
      q.type !== 'themecloze' && q.type !== 'themedate') markWord(q.word.id, isCorrect ? 'known' : 'learning');
+  recordFsrsAnswer(q, isCorrect, { context: state.view });
   if(state.view === 'session') sessionAnswered(isCorrect);
   if(state.view === 'mockexam') mockAnswered(isCorrect);
   recordPracticeAnswer(q, isCorrect);
@@ -1287,6 +1450,7 @@ function handleTypeSubmit(value){
   state.ui.typedValue = value;
   state.ui.typedResult = isCorrect ? 'ok' : 'bad';
   if(q.word) markWord(q.word.id, isCorrect ? 'known' : 'learning');
+  recordFsrsAnswer(q, isCorrect, { context: state.view });
   if(state.view === 'session') sessionAnswered(isCorrect);
   recordPracticeAnswer(q, isCorrect);
   render();
@@ -2035,6 +2199,14 @@ function renderSessionSetup(){
     html += '<div class="hint" style="margin-top:8px">сначала все карточки, потом все переводы и т.д. по очереди</div>';
   }
   html += '<div class="controls" style="margin-top:14px"><button class="btn btn-primary" id="start-session">Начать сессию</button></div>';
+  if(window.LearningSync && window.LearningSync.isLoggedIn()){
+    var sessPool = ALL_WORDS.filter(function(w){
+      var cats = state.session.mode === 'lesson' ? categoriesForLessons(state.session.lessonSelected) : state.session.catSelected;
+      return cats.indexOf(w.category) !== -1 && !state.excluded[w.id];
+    });
+    var sessStats = window.LearningSync.computeStats(sessPool, function(w){ return 'word:' + w.id; });
+    html += renderFsrsStats(sessStats, 'Выбранная подборка');
+  }
   if(state.session.emptyWarning){
     html += '<div class="feedback bad" style="margin-top:10px">Нет слов под выбранные фильтры — выберите хотя бы один урок или категорию.</div>';
   }
@@ -2380,7 +2552,17 @@ function render(){
     '<path d="M20 1 A19 19 0 0 1 20 39 A9.5 9.5 0 0 1 20 20 A9.5 9.5 0 0 0 20 1 Z" fill="#C23B34"/>' +
     '<path d="M20 39 A19 19 0 0 1 20 1 A9.5 9.5 0 0 1 20 20 A9.5 9.5 0 0 0 20 39 Z" fill="#1F4E8C"/></svg>' +
     '<div><h1>단어장 — Тренажёр</h1><div class="sub mono">' + s.total + ' слов · ' + GRAMMAR_EXERCISES.length + ' упражнений грамматики</div></div></div>';
-  html += '<div class="stats-pill"><span class="dot" style="background:#4C7A5E"></span><b>' + s.known + '</b><span class="dot" style="background:#B4802A"></span><b>' + s.learning + '</b></div></header>';
+  html += '<div class="header-actions"><div class="stats-pill"><span class="dot" style="background:#4C7A5E"></span><b>' + s.known + '</b><span class="dot" style="background:#B4802A"></span><b>' + s.learning + '</b></div>';
+  if(window.LearningSync && window.LearningSync.isConfigured()){
+    if(window.LearningSync.isLoggedIn()){
+      html += '<span class="header-user">' + esc(authUsernameDisplay()) + '</span>'
+        + '<button class="header-login-btn" id="header-logout-btn">Выйти</button>';
+    } else {
+      html += '<button class="header-login-btn" id="header-login-btn">Войти</button>';
+    }
+  }
+  html += '</div></header>';
+  if(window.LearningSync && window.LearningSync.isLoggedIn()) html += renderFsrsStats(s, 'Словарь');
   html += renderTopNav();
 
   if(state.loaded){
@@ -2404,6 +2586,7 @@ function render(){
   else if(state.view === 'search') html += renderSearchView();
 
   html += '<footer>단어장 · прогресс сохраняется автоматически</footer>';
+  html += renderMigrationOverlay();
   root.innerHTML = html;
   attachHandlers();
   if(state.view === 'search'){
@@ -2414,6 +2597,16 @@ function render(){
 
 /* ============ HANDLERS ============ */
 function attachHandlers(){
+  var loginBtn = document.getElementById('header-login-btn');
+  if(loginBtn) loginBtn.onclick = function(){
+    if(window.AuthUI) window.AuthUI.show('login');
+  };
+  var logoutBtn = document.getElementById('header-logout-btn');
+  if(logoutBtn) logoutBtn.onclick = function(){ handleAuthLogout(); };
+  var migImport = document.getElementById('migration-import');
+  if(migImport) migImport.onclick = function(){ handleMigration('import'); };
+  var migFresh = document.getElementById('migration-fresh');
+  if(migFresh) migFresh.onclick = function(){ handleMigration('fresh'); };
   document.querySelectorAll('[data-view]').forEach(function(el){
     el.onclick = function(){ state.view = el.getAttribute('data-view'); render(); };
   });
@@ -2729,6 +2922,19 @@ async function boot(){
     .catch(function(){ return []; });
   initData();
   initState();
+  if(window.AuthUI){
+    window.AuthUI.init({ onLogin: handleAuthLogin, onRegister: handleAuthRegister });
+  }
+  if(window.LearningSync) await window.LearningSync.ready;
+  state.authReady = true;
+  if(window.LearningSync && window.LearningSync.isConfigured()){
+    if(window.LearningSync.isLoggedIn()){
+      if(window.LearningSync.needsMigrationPrompt()) state.migrationPrompt = true;
+      else if(window.AuthUI) window.AuthUI.hide();
+    } else if(window.AuthUI) {
+      window.AuthUI.show('login');
+    }
+  }
   loadProgress();
 }
 boot();
