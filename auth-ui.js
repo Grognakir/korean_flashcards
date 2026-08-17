@@ -39,9 +39,10 @@ function injectStyles(){
     + '.auth-eye:disabled{ cursor:default; opacity:0.5; }'
     + '.auth-submit{ width:100%; margin-top:6px; }'
     + '.auth-submit:disabled{ opacity:0.6; cursor:default; }'
-    + '.auth-card{ position:relative; }'
-    + '.auth-back{ position:absolute; top:-6px; left:-6px; width:30px; height:30px; border-radius:50%; border:1px solid var(--line); background:#fff; color:var(--stone); font-size:15px; line-height:1; cursor:pointer; box-shadow:var(--card-shadow); }'
-    + '.auth-back:hover{ color:var(--ink); }'
+    + '.auth-header{ display:grid; grid-template-columns:30px 1fr 30px; align-items:center; margin-bottom:18px; }'
+    + '.auth-header .auth-title{ margin-bottom:0; }'
+    + '.auth-back{ width:30px; height:30px; border-radius:50%; border:1px solid var(--line); background:var(--paper); color:var(--stone); font-size:15px; line-height:1; cursor:pointer; }'
+    + '.auth-back:hover{ color:var(--ink); border-color:var(--stone); }'
     + '.auth-back:disabled{ opacity:0.5; cursor:default; }'
     + '@media (max-width:420px){ .auth-card{ max-width:100%; } }';
   var tag = document.createElement('style');
@@ -84,8 +85,11 @@ function render(preserve){
   var vals = preserve !== false ? currentFieldValues() : null;
   var isLogin = state.mode === 'login';
   var html = '<div class="auth-card qcard">'
-    + '<button type="button" class="auth-back" id="auth-back" title="Продолжить без входа"' + (state.loading ? ' disabled' : '') + '>←</button>'
-    + '<div class="auth-title">' + (isLogin ? 'Вход' : 'Регистрация') + '</div>'
+    + '<div class="auth-header">'
+    +   '<button type="button" class="auth-back" id="auth-back" title="Продолжить без входа"' + (state.loading ? ' disabled' : '') + '>←</button>'
+    +   '<div class="auth-title">' + (isLogin ? 'Вход' : 'Регистрация') + '</div>'
+    +   '<span></span>'
+    + '</div>'
     + '<div class="sub-toggle">'
     +   '<button type="button" data-authtab="login" class="' + (isLogin ? 'active' : '') + '"' + (state.loading ? ' disabled' : '') + '>Вход</button>'
     +   '<button type="button" data-authtab="register" class="' + (!isLogin ? 'active' : '') + '"' + (state.loading ? ' disabled' : '') + '>Регистрация</button>'
