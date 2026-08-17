@@ -3,7 +3,7 @@
 "use strict";
 
 /* ============ DATA ============ */
-var RAW, GRAMMAR_TOPICS, GRAMMAR_EXERCISES, EXAM_DATA, QA_DATA, THEME_DATA, PHRASES_RAW, WRITING_DATA;
+var RAW, GRAMMAR_TOPICS, GRAMMAR_EXERCISES, EXAM_DATA, QA_DATA, THEME_DATA, PHRASES_RAW, WRITING_DATA, CURRICULUM_DATA;
 var EXAM_LABELS = ['가','나','다','라'];
 var ALL_WORDS, CATEGORIES, GRAMMAR_CATS, EX_CAT_MAP;
 var RELATED_BY_KR, WORDS_BY_ID;
@@ -541,6 +541,9 @@ function initState(){
       listeningCorrect: 0, listeningTotal: 0, readingCorrect: 0, readingTotal: 0 },
     writingPractice: { phase: 'pick', topicKey: null, combos: [], iterIndex: 0,
       checked: false, blankCorrect: {}, totalCorrect: 0, totalBlanks: 0, freeText: '' },
+    speakingPractice: { phase: 'pick', topicId: null, iterIndex: 0,
+      checked: false, blankCorrect: {}, totalCorrect: 0, totalBlanks: 0 },
+    listeningPractice: { phase: 'pick', topicId: null },
     authReady: false,
     migrationPrompt: false,
     migrationBusy: false,
@@ -1082,6 +1085,67 @@ function advanceWritingIteration(){
   wp.blankCorrect = {};
   wp.iterIndex++;
   wp.phase = wp.iterIndex >= wp.combos.length ? 'write' : 'blank';
+}
+
+/* ============ SPEAKING PRACTICE (말하기/읽기) ============ */
+function findSpeakingTopic(topicId){
+  for(var i=0; i<CURRICULUM_DATA.lessons.length; i++){
+    var lesson = CURRICULUM_DATA.lessons[i];
+    for(var j=0; j<lesson.speaking.length; j++){
+      if(lesson.speaking[j].id === topicId) return { lesson: lesson, topic: lesson.speaking[j] };
+    }
+  }
+  return null;
+}
+function startSpeakingTopic(topicId){
+  if(!findSpeakingTopic(topicId)) return;
+  state.speakingPractice = { phase:'read', topicId:topicId, iterIndex:0,
+    checked:false, blankCorrect:{}, totalCorrect:0, totalBlanks:0 };
+}
+function speakingBlankIndices(lines, iterIndex){
+  var dialogueIdx = [];
+  lines.forEach(function(l, i){ if(l.speaker) dialogueIdx.push(i); });
+  if(iterIndex === 0) return dialogueIdx.filter(function(i){ return lines[i].speaker === 'A'; });
+  if(iterIndex === 1) return dialogueIdx.filter(function(i){ return lines[i].speaker === 'B'; });
+  return dialogueIdx.filter(function(idx, k){ return k % 2 === 0; });
+}
+function checkSpeakingBlanks(){
+  var sp = state.speakingPractice;
+  var found = findSpeakingTopic(sp.topicId);
+  if(!found) return;
+  var lines = found.topic.lines;
+  var idxs = speakingBlankIndices(lines, sp.iterIndex);
+  var correct = 0;
+  idxs.forEach(function(i){
+    var input = document.getElementById('sblank-' + i);
+    var typed = input ? input.value.trim() : '';
+    var isRight = typed === lines[i].text;
+    sp.blankCorrect[i] = isRight;
+    if(isRight) correct++;
+  });
+  sp.totalCorrect += correct;
+  sp.totalBlanks += idxs.length;
+  sp.checked = true;
+}
+function advanceSpeakingIteration(){
+  var sp = state.speakingPractice;
+  sp.checked = false;
+  sp.blankCorrect = {};
+  sp.iterIndex++;
+  sp.phase = sp.iterIndex >= 3 ? 'reread' : 'blank';
+}
+
+/* ============ LISTENING PRACTICE (듣기) ============ */
+function findListeningTopic(topicId){
+  for(var i=0; i<CURRICULUM_DATA.lessons.length; i++){
+    var lesson = CURRICULUM_DATA.lessons[i];
+    if(lesson.listening.id === topicId) return { lesson: lesson, topic: lesson.listening };
+  }
+  return null;
+}
+function startListeningTopic(topicId){
+  if(!findListeningTopic(topicId)) return;
+  state.listeningPractice = { phase:'show', topicId:topicId };
 }
 
 /* ============ QA STANDALONE QUEUE ============ */
@@ -2332,9 +2396,11 @@ function renderExamView(){
   var html = '<div class="sub-toggle">' +
     '<button data-exammode="test" class="' + (state.examMode==='test'?'active':'') + '">Тренировка тестов</button>' +
     '<button data-exammode="writing" class="' + (state.examMode==='writing'?'active':'') + '">쓰기</button>' +
-    '<button data-exammode="speaking" class="' + (state.examMode==='speaking'?'active':'') + '">말하기</button></div>';
+    '<button data-exammode="speaking" class="' + (state.examMode==='speaking'?'active':'') + '">말하기/읽기</button>' +
+    '<button data-exammode="listening" class="' + (state.examMode==='listening'?'active':'') + '">듣기</button></div>';
   html += state.examMode === 'writing' ? renderWritingView()
-    : state.examMode === 'speaking' ? '<div class="empty"><b>Скоро</b>Задачи для 말하기 обсудим отдельно</div>'
+    : state.examMode === 'speaking' ? renderSpeakingView()
+    : state.examMode === 'listening' ? renderListeningView()
     : renderExamTestMode();
   return html;
 }
@@ -2491,6 +2557,116 @@ function renderWritingView(){
   if(wp.phase === 'blank') return renderWritingBlank();
   if(wp.phase === 'write') return renderWritingWrite();
   return renderWritingDone();
+}
+
+function renderDialogueLines(lines, blankIdxs, checked, blankCorrect){
+  var blankSet = {};
+  if(blankIdxs) blankIdxs.forEach(function(i){ blankSet[i] = true; });
+  var html = '<div class="notes kr" style="font-size:15px;line-height:2;margin-bottom:10px;padding:14px;background:var(--paper);border-radius:12px;max-width:none">';
+  lines.forEach(function(l, i){
+    if(!l.speaker){
+      html += '<div class="dialogue-note">(' + esc(l.note) + ')</div>';
+      return;
+    }
+    html += '<div class="dialogue-line"><b>' + esc(l.name) + ':</b> ';
+    if(blankSet[i]){
+      var cls = 'wblank-input' + (checked ? (blankCorrect[i] ? ' ok' : ' bad') : '');
+      html += '<input class="' + cls + '" id="sblank-' + i + '" autocomplete="off"' + (checked?' disabled':'') + '/>';
+    } else {
+      html += esc(l.text);
+    }
+    html += '</div>';
+  });
+  html += '</div>';
+  return html;
+}
+function speakingQuitBtn(){
+  return '<div class="controls"><button class="btn" id="speaking-quit">Выйти к темам</button></div>';
+}
+function renderSpeakingPick(){
+  var html = '<div class="panel"><div class="meaning" style="text-align:center;font-size:19px">Выберите тему</div>';
+  html += '<div class="cat-grid open">';
+  CURRICULUM_DATA.lessons.forEach(function(lesson){
+    lesson.speaking.forEach(function(sp){
+      html += '<div class="cat-chip" data-speakingtopic="' + esc(sp.id) + '">Урок ' + lesson.num + ' — ' + esc(sp.titleRu) + '</div>';
+    });
+  });
+  html += '</div></div>';
+  return html;
+}
+function renderSpeakingRead(){
+  var found = findSpeakingTopic(state.speakingPractice.topicId);
+  if(!found) return '<div class="empty">Тема не найдена</div>';
+  var html = '<div class="qcard"><div class="meaning" style="text-align:center;font-size:18px">Урок ' + found.lesson.num + ' — ' + esc(found.topic.titleRu) + '</div>';
+  html += renderDialogueLines(found.topic.lines, null, false, {});
+  html += '<div class="controls"><button class="btn btn-primary" id="speaking-to-blanks">Дальше</button></div></div>';
+  html += speakingQuitBtn();
+  return html;
+}
+function renderSpeakingBlank(){
+  var sp = state.speakingPractice;
+  var found = findSpeakingTopic(sp.topicId);
+  if(!found) return '<div class="empty">Тема не найдена</div>';
+  var lines = found.topic.lines;
+  var idxs = speakingBlankIndices(lines, sp.iterIndex);
+  var roleLabel = sp.iterIndex === 0 ? 'реплики первого говорящего' : sp.iterIndex === 1 ? 'реплики второго говорящего' : 'реплики вперемешку';
+  var html = '<div class="stage-header"><span class="stage-label">Впишите ' + roleLabel + '</span>' +
+    '<span class="stage-count mono">Итерация ' + (sp.iterIndex+1) + ' из 3</span></div>';
+  html += '<div class="qcard">';
+  html += renderDialogueLines(lines, idxs, sp.checked, sp.blankCorrect);
+  if(sp.checked){
+    var wrong = idxs.filter(function(i){ return !sp.blankCorrect[i]; });
+    html += wrong.length
+      ? '<div class="feedback bad">Правильно: ' + wrong.map(function(i){ return esc(lines[i].text); }).join(' · ') + '</div>'
+      : '<div class="feedback ok">Всё верно!</div>';
+    html += '<div class="controls"><button class="btn btn-primary" id="speaking-next-iter">Дальше</button></div>';
+  } else {
+    html += '<div class="controls"><button class="btn btn-primary" id="speaking-check-blanks">Проверить</button></div>';
+  }
+  html += '</div>';
+  html += speakingQuitBtn();
+  return html;
+}
+function renderSpeakingReread(){
+  var sp = state.speakingPractice;
+  var found = findSpeakingTopic(sp.topicId);
+  if(!found) return '<div class="empty">Тема не найдена</div>';
+  var html = '<div class="qcard"><div class="meaning" style="text-align:center;font-size:18px">Урок ' + found.lesson.num + ' — ' + esc(found.topic.titleRu) + '</div>';
+  html += '<div class="summary-row"><span>Пропуски угаданы</span><span class="val">' + sp.totalCorrect + ' / ' + sp.totalBlanks + '</span></div>';
+  html += renderDialogueLines(found.topic.lines, null, false, {});
+  html += '<div class="controls"><button class="btn" id="speaking-restart-same">Ещё раз (эта тема)</button>' +
+    '<button class="btn btn-primary" id="speaking-back-pick">Выбрать другую тему</button></div></div>';
+  return html;
+}
+function renderSpeakingView(){
+  var sp = state.speakingPractice;
+  if(sp.phase === 'pick') return renderSpeakingPick();
+  if(sp.phase === 'read') return renderSpeakingRead();
+  if(sp.phase === 'blank') return renderSpeakingBlank();
+  return renderSpeakingReread();
+}
+
+function renderListeningPick(){
+  var html = '<div class="panel"><div class="meaning" style="text-align:center;font-size:19px">Выберите тему</div>';
+  html += '<div class="cat-grid open">';
+  CURRICULUM_DATA.lessons.forEach(function(lesson){
+    html += '<div class="cat-chip" data-listeningtopic="' + esc(lesson.listening.id) + '">Урок ' + lesson.num + ' — ' + esc(lesson.listening.titleRu) + '</div>';
+  });
+  html += '</div></div>';
+  return html;
+}
+function renderListeningShow(){
+  var found = findListeningTopic(state.listeningPractice.topicId);
+  if(!found) return '<div class="empty">Тема не найдена</div>';
+  var html = '<div class="qcard"><div class="meaning" style="text-align:center;font-size:18px">Урок ' + found.lesson.num + ' — ' + esc(found.topic.titleRu) + '</div>';
+  html += '<audio controls preload="none" style="width:100%;margin-bottom:16px" src="' + esc(encodeURI(found.topic.audio)) + '"></audio>';
+  html += renderDialogueLines(found.topic.lines, null, false, {});
+  html += '<div class="controls"><button class="btn btn-primary" id="listening-back-pick">Выбрать другой урок</button></div></div>';
+  return html;
+}
+function renderListeningView(){
+  if(state.listeningPractice.phase === 'pick') return renderListeningPick();
+  return renderListeningShow();
 }
 
 function renderQAView(){
@@ -3005,6 +3181,28 @@ function attachHandlers(){
   var writingQuit = document.getElementById('writing-quit');
   if(writingQuit) writingQuit.onclick = function(){ state.writingPractice.phase = 'pick'; render(); };
 
+  document.querySelectorAll('[data-speakingtopic]').forEach(function(el){
+    el.onclick = function(){ startSpeakingTopic(el.getAttribute('data-speakingtopic')); render(); };
+  });
+  var speakingToBlanks = document.getElementById('speaking-to-blanks');
+  if(speakingToBlanks) speakingToBlanks.onclick = function(){ state.speakingPractice.phase = 'blank'; render(); };
+  var speakingCheckBlanks = document.getElementById('speaking-check-blanks');
+  if(speakingCheckBlanks) speakingCheckBlanks.onclick = function(){ checkSpeakingBlanks(); render(); };
+  var speakingNextIter = document.getElementById('speaking-next-iter');
+  if(speakingNextIter) speakingNextIter.onclick = function(){ advanceSpeakingIteration(); render(); };
+  var speakingRestartSame = document.getElementById('speaking-restart-same');
+  if(speakingRestartSame) speakingRestartSame.onclick = function(){ startSpeakingTopic(state.speakingPractice.topicId); render(); };
+  var speakingBackPick = document.getElementById('speaking-back-pick');
+  if(speakingBackPick) speakingBackPick.onclick = function(){ state.speakingPractice.phase = 'pick'; render(); };
+  var speakingQuit = document.getElementById('speaking-quit');
+  if(speakingQuit) speakingQuit.onclick = function(){ state.speakingPractice.phase = 'pick'; render(); };
+
+  document.querySelectorAll('[data-listeningtopic]').forEach(function(el){
+    el.onclick = function(){ startListeningTopic(el.getAttribute('data-listeningtopic')); render(); };
+  });
+  var listeningBackPick = document.getElementById('listening-back-pick');
+  if(listeningBackPick) listeningBackPick.onclick = function(){ state.listeningPractice.phase = 'pick'; render(); };
+
   // qa sub-tabs
   document.querySelectorAll('.cat-chip[data-qasub]').forEach(function(el){
     el.onclick = function(){ state.qaSub = el.getAttribute('data-qasub'); state.qaSubOpen = false; resetQAQueue(); render(); };
@@ -3130,13 +3328,13 @@ function attachHandlers(){
 
 async function boot(){
   var files = ['data/words.json','data/grammar.json','data/grammar-exercises.json',
-               'data/exam.json','data/qa.json','data/theme.json','data/phrases.json','data/writing.json'];
+               'data/exam.json','data/qa.json','data/theme.json','data/phrases.json','data/writing.json','data/curriculum.json'];
   var results = await Promise.all(files.map(function(f){
     return fetch(f).then(function(r){ return r.json(); });
   }));
   RAW = results[0]; GRAMMAR_TOPICS = results[1]; GRAMMAR_EXERCISES = results[2];
   EXAM_DATA = results[3]; QA_DATA = results[4]; THEME_DATA = results[5]; PHRASES_RAW = results[6];
-  WRITING_DATA = results[7];
+  WRITING_DATA = results[7]; CURRICULUM_DATA = results[8];
   THEME_DATA.numbers = buildNumberExercises();
   EXAM_DATA.listening = await fetch('data/local/listening.json')
     .then(function(r){ return r.ok ? r.json() : []; })
