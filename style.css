@@ -91,6 +91,9 @@ header{ display:flex; align-items:center; justify-content:space-between; margin-
 .meaning{ font-size:22px; font-weight:700; margin-bottom:10px; line-height:1.35;}
 .notes{ font-size:13.5px; color:var(--ink-soft); line-height:1.55; max-width:440px;}
 .notes b{ color:var(--ink); }
+.sense-block{ margin-bottom:14px; }
+.sense-block:last-child{ margin-bottom:0; }
+.word-forms{ margin-top:6px; }
 
 .qcard{ background:#fff; border:1px solid var(--line); border-radius:20px; padding:26px 22px; box-shadow:var(--card-shadow); position:relative; overflow:hidden;}
 .q-kr{ font-weight:900; font-size:36px; text-align:center; margin:8px 0 4px;}

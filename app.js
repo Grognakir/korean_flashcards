@@ -13,7 +13,7 @@ function initData(){
   ALL_WORDS = [];
   RAW.forEach(function(cat){
     cat.words.forEach(function(w, wi){
-      ALL_WORDS.push({ id: cat.category+'::'+wi+'::'+w.kr, category: cat.category, kr: w.kr, translit: w.translit, meaning: w.meaning, notes: w.notes || '', related: w.related || null, examples: w.examples || null });
+      ALL_WORDS.push({ id: cat.category+'::'+wi+'::'+w.kr, category: cat.category, kr: w.kr, translit: w.translit, meaning: w.meaning, notes: w.notes || '', related: w.related || null, examples: w.examples || null, senses: w.senses || null, forms: w.forms || null });
     });
   });
   CATEGORIES = RAW.map(function(c){ return c.category; });
@@ -1490,8 +1490,23 @@ function handleConstructClear(){
 }
 
 /* ============ RENDER: QUESTION TYPES ============ */
-function renderCard(q){
-  var word = q.word;
+function renderFormsLine(forms){
+  if(!forms || !forms.length) return '';
+  return '<div class="hint word-forms">' + esc(forms.map(function(f){ return f.label + ': ' + f.value; }).join(' · ')) + '</div>';
+}
+function renderWordBack(word){
+  if(word.senses && word.senses.length){
+    return word.senses.map(function(sense, i){
+      var html = '<div class="sense-block">';
+      html += '<div class="meaning">' + (word.senses.length > 1 ? (i + 1) + ') ' : '') + esc(sense.meaning) + '</div>';
+      if(sense.examples && sense.examples.length){
+        html += '<div class="notes"><b>Пример:</b> ' + esc(sense.examples[0].kr) + ' — ' + esc(sense.examples[0].ru) + '</div>';
+      }
+      html += renderFormsLine(sense.forms);
+      html += '</div>';
+      return html;
+    }).join('');
+  }
   var backContent = '';
   if(word.examples && word.examples.length){
     backContent = '<div class="notes"><b>Пример:</b> ' + esc(word.examples[0].kr) + ' — ' + esc(word.examples[0].ru) + '</div>';
@@ -1500,6 +1515,10 @@ function renderCard(q){
     if(examples.length) backContent = '<div class="notes"><b>Пример:</b> ' + esc(examples[0].kr) + ' — ' + esc(examples[0].ru) + '</div>';
     else if(word.notes) backContent = '<div class="notes">' + esc(word.notes) + '</div>';
   }
+  return '<div class="meaning">' + esc(word.meaning) + '</div>' + backContent + renderFormsLine(word.forms);
+}
+function renderCard(q){
+  var word = q.word;
   var out = '<div class="stage">';
   out += '<button class="btn-exclude" id="exclude-word" title="Убрать это слово из упражнений">✕</button>';
   out += '<div class="card' + (state.ui.flipped?' flipped':'') + '" id="flip-card">';
@@ -1507,7 +1526,7 @@ function renderCard(q){
     '<div class="kr-word kr">' + esc(word.kr) + '</div><div class="translit mono">' + esc(word.translit) + '</div>' +
     '<div class="hint">нажмите, чтобы перевернуть</div></div>';
   out += '<div class="face back"><div class="taegeuk-edge"></div><div class="cat-tag">' + esc(shortCat(word.category)) + '</div>' +
-    '<div class="meaning">' + esc(word.meaning) + '</div>' + backContent + '</div>';
+    renderWordBack(word) + '</div>';
   out += '</div></div>';
   out += '<div class="controls"><button class="btn btn-again" id="btn-again">Повторить</button><button class="btn btn-know" id="btn-know">Знаю</button></div>';
   return out;
