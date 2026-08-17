@@ -2074,7 +2074,11 @@ function renderGrammarReference(){
     GRAMMAR_TOPICS.forEach(function(topic){
       if(state.grammarSelected.indexOf(topic.category) === -1) return;
       topic.items.forEach(function(it){
-        (it.lessons || []).forEach(function(l){ (byLesson[l] = byLesson[l] || []).push(it); });
+        (it.lessons || []).forEach(function(l){
+          byLesson[l] = byLesson[l] || [];
+          if(byLesson[l].some(function(x){ return x.pattern === it.pattern; })) return;
+          byLesson[l].push(it);
+        });
       });
     });
     Object.keys(byLesson).map(Number).sort(function(a,b){ return a-b; }).forEach(function(l){
