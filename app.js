@@ -2407,33 +2407,67 @@ function renderHonorificTable(){
   html += '</div></div>';
   return html;
 }
+/* Определяем тип неправильности по последней букве основы (перед 다):
+   ㅂ/ㄷ/ㄹ-받침, ㅡ-конец (в т.ч. 르다 отдельно), иначе — прочее */
+function classifyIrregularWord(word){
+  if(word.length >= 2 && word.slice(-2) === '르다') return '르';
+  var stem = word.slice(0, -1);
+  var ch = stem.slice(-1);
+  var code = ch.charCodeAt(0) - 0xAC00;
+  if(code < 0 || code > 11171) return 'other';
+  var final = code % 28;
+  var medial = Math.floor(code / 28) % 21;
+  if(final === 17) return 'ㅂ';
+  if(final === 7) return 'ㄷ';
+  if(final === 8) return 'ㄹ';
+  if(final === 0 && medial === 18) return 'ㅡ';
+  return 'other';
+}
+var IRREGULAR_GROUPS = [
+  {key:'ㅂ', title:'ㅂ 불규칙', rule:'ㅂ + гласная → 워 (돕다/곱다 → 와). Меняется БОЛЬШИНСТВО слов с ㅂ на конце основы — кроме нескольких обычных исключений ниже.'},
+  {key:'ㄷ', title:'ㄷ 불규칙', rule:'ㄷ + гласная → ㄹ. Здесь наоборот: меняется только НЕБОЛЬШАЯ группа слов, остальные глаголы с ㄷ на конце — обычные (см. исключения ниже).'},
+  {key:'르', title:'르 불규칙', rule:'르 → ㄹㄹ (다르다 → 달라요). Меняются ПОЧТИ ВСЕ глаголы на -르다 — кроме одного-двух исключений ниже.'},
+  {key:'ㅡ', title:'ㅡ 탈락', rule:'ㅡ выпадает перед гласной (쓰다 → 써요). Меняются АБСОЛЮТНО ВСЕ глаголы на -으다/-트다/-프다, исключений нет.'},
+  {key:'ㄹ', title:'ㄹ 탈락', rule:'ㄹ-받침 выпадает перед -ㄴ/-ㅂ/-ㅅ (살다 → 삽니다, 사세요). Меняются АБСОЛЮТНО ВСЕ глаголы с ㄹ на конце основы, исключений нет.'},
+  {key:'other', title:'Другие обычные глаголы', rule:'Не относятся ни к одной из этих групп — обычные глаголы для сравнения.'}
+];
 function renderIrregularTable(){
-  var seen = {}, irr = [], reg = [];
+  var seen = {}, byGroup = {};
   (THEME_DATA.irregular || []).forEach(function(it){
     if(seen[it.word]) return;
     seen[it.word] = true;
-    (it.regular ? reg : irr).push(it);
+    var g = classifyIrregularWord(it.word);
+    (byGroup[g] = byGroup[g] || []).push(it);
   });
-  irr.sort(function(a,b){ return a.word < b.word ? -1 : a.word > b.word ? 1 : 0; });
-  reg.sort(function(a,b){ return a.word < b.word ? -1 : a.word > b.word ? 1 : 0; });
-  var half = Math.ceil(irr.length/2);
-  var colA = irr.slice(0, half), colB = irr.slice(half);
-  var rows = Math.max(colA.length, colB.length);
   var html = '<div class="qcard"><div class="ref-detail">';
-  html += '<div class="rd-title">불규칙 동사 · Неправильные глаголы (' + irr.length + ')</div>';
-  html += '<table class="num-combo-table"><tr><th>Слово</th><th>Форма</th><th class="num-col-gap">Слово</th><th>Форма</th></tr>';
-  for(var i=0;i<rows;i++){
-    var a = colA[i], b = colB[i];
-    html += '<tr>';
-    html += a ? '<td class="kr">' + esc(a.word) + '</td><td class="kr">' + esc(a.correct) + '</td>' : '<td></td><td></td>';
-    html += b ? '<td class="kr num-col-gap">' + esc(b.word) + '</td><td class="kr">' + esc(b.correct) + '</td>' : '<td class="num-col-gap"></td><td></td>';
-    html += '</tr>';
-  }
-  html += '</table>';
-  if(reg.length){
-    html += '<div class="rd-title" style="margin-top:18px">похожие обычные глаголы (НЕ исключения)</div>';
-    html += '<div class="notes">' + reg.map(function(it){ return esc(it.word) + ' — ' + esc(it.correct); }).join(', ') + '</div>';
-  }
+  IRREGULAR_GROUPS.forEach(function(g){
+    var items = (byGroup[g.key] || []).slice().sort(function(a,b){ return a.word < b.word ? -1 : a.word > b.word ? 1 : 0; });
+    if(!items.length) return;
+    var irr = items.filter(function(it){ return !it.regular; });
+    var reg = items.filter(function(it){ return it.regular; });
+    var countLabel = irr.length && reg.length ? irr.length + ' + ' + reg.length + ' обычных'
+      : irr.length ? String(irr.length) : reg.length + ' обычных';
+    html += '<div class="rd-title" style="margin-top:18px">' + esc(g.title) + ' (' + countLabel + ')</div>';
+    html += '<div class="notes" style="margin-bottom:8px">' + esc(g.rule) + '</div>';
+    if(irr.length){
+      var half = Math.ceil(irr.length/2);
+      var colA = irr.slice(0, half), colB = irr.slice(half);
+      var rows = Math.max(colA.length, colB.length);
+      html += '<table class="num-combo-table"><tr><th>Слово</th><th>Форма</th><th class="num-col-gap">Слово</th><th>Форма</th></tr>';
+      for(var i=0;i<rows;i++){
+        var a = colA[i], b = colB[i];
+        html += '<tr>';
+        html += a ? '<td class="kr">' + esc(a.word) + '</td><td class="kr">' + esc(a.correct) + '</td>' : '<td></td><td></td>';
+        html += b ? '<td class="kr num-col-gap">' + esc(b.word) + '</td><td class="kr">' + esc(b.correct) + '</td>' : '<td class="num-col-gap"></td><td></td>';
+        html += '</tr>';
+      }
+      html += '</table>';
+    }
+    if(reg.length){
+      html += '<div class="notes" style="margin-top:6px">' + (irr.length ? 'НЕ меняются (исключения): ' : '') +
+        reg.map(function(it){ return esc(it.word) + ' — ' + esc(it.correct); }).join(', ') + '</div>';
+    }
+  });
   html += '</div></div>';
   return html;
 }
