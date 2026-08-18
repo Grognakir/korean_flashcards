@@ -2295,21 +2295,25 @@ function renderRefDetail(it){
 function renderNumbersTable(){
   var sinoRows = [0,1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100,1000,10000];
   var nativeRows = [1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90];
+  var rows = Math.max(sinoRows.length, nativeRows.length);
   var html = '<div class="qcard"><div class="ref-detail">';
-  html += '<div class="num-tables-row">';
-  html += '<div><div class="rd-title">한자어</div><table><tr><th>№</th><th>Чтение</th></tr>';
-  sinoRows.forEach(function(n){
-    html += '<tr><td class="mono">' + n + '</td><td class="kr">' + esc(sinoNumber(n)) + '</td></tr>';
-  });
-  html += '</table></div>';
-  html += '<div><div class="rd-title">고유어</div><table><tr><th>№</th><th>Само</th><th>+ счётное</th></tr>';
-  nativeRows.forEach(function(n){
-    html += '<tr><td class="mono">' + n + '</td><td class="kr">' + esc(nativeNumber(n)) + '</td><td class="kr">' + esc(nativeCounterNumber(n)) + '</td></tr>';
-  });
-  html += '</table></div>';
-  html += '</div>';
+  html += '<table class="num-combo-table"><tr><th>№</th><th>한자어</th><th class="num-col-gap">№</th><th>고유어</th></tr>';
+  for(var i=0;i<rows;i++){
+    var sn = sinoRows[i], nn = nativeRows[i];
+    html += '<tr>';
+    html += sn != null ? '<td class="mono">' + sn + '</td><td class="kr">' + esc(sinoNumber(sn)) + '</td>' : '<td></td><td></td>';
+    if(nn != null){
+      var reading = nativeNumber(nn), counter = nativeCounterNumber(nn);
+      var readingHtml = esc(reading) + (counter !== reading ? ' <span class="num-counter">(' + esc(counter) + ')</span>' : '');
+      html += '<td class="mono num-col-gap">' + nn + '</td><td class="kr">' + readingHtml + '</td>';
+    } else {
+      html += '<td class="num-col-gap"></td><td></td>';
+    }
+    html += '</tr>';
+  }
+  html += '</table>';
   html += '<div class="notes" style="margin-top:14px">한자어 — с минутами, датами, деньгами, этажами (100+) и большими числами.</div>';
-  html += '<div class="notes" style="margin-top:6px">고유어 перед счётным словом меняется только у 1, 2, 3, 4 и 20: 하나→한, 둘→두, 셋→세, 넷→네, 스물→스무.</div>';
+  html += '<div class="notes" style="margin-top:6px">고유어 в скобках — форма перед счётным словом, если отличается: 하나→한, 둘→두, 셋→세, 넷→네, 스물→스무.</div>';
   html += '</div></div>';
   return html;
 }
