@@ -2431,9 +2431,18 @@ var IRREGULAR_GROUPS = [
   {key:'ㅂ', title:'ㅂ 불규칙', exceptionSide:'regular', rule:'ㅂ + гласная → 워 (돕다/곱다 → 와). Меняется БОЛЬШИНСТВО слов с ㅂ на конце основы — правило предсказуемо, поэтому важны только исключения, которые НЕ меняются.'},
   {key:'ㄷ', title:'ㄷ 불규칙', exceptionSide:'irregular', rule:'ㄷ + гласная → ㄹ. Здесь наоборот: меняется только НЕБОЛЬШАЯ группа слов, это и есть исключения — остальные глаголы с ㄷ на конце обычные (это норма, не список).'},
   {key:'르', title:'르 불규칙', exceptionSide:'regular', rule:'르 → ㄹㄹ (다르다 → 달라요). Меняются ПОЧТИ ВСЕ глаголы на -르다 — важны только исключения, которые НЕ меняются.'},
-  {key:'ㅡ', title:'ㅡ 탈락', exceptionSide:'none', rule:'ㅡ выпадает перед гласной (쓰다 → 써요). Меняются АБСОЛЮТНО ВСЕ глаголы на -으다/-트다/-프다, исключений нет.'},
-  {key:'ㄹ', title:'ㄹ 탈락', exceptionSide:'none', rule:'ㄹ-받침 выпадает перед -ㄴ/-ㅂ/-ㅅ (살다 → 삽니다, 사세요). Меняются АБСОЛЮТНО ВСЕ глаголы с ㄹ на конце основы, исключений нет.'},
-  {key:'other', title:'Другие обычные глаголы', exceptionSide:'none', rule:'Не относятся ни к одной из этих групп — обычные глаголы для сравнения.'}
+  {key:'ㅡ', title:'ㅡ 탈락', exceptionSide:'all', rule:'ㅡ выпадает перед гласной. Меняются АБСОЛЮТНО ВСЕ глаголы на -으다/-트다/-프다, исключений нет.'},
+  {key:'ㄹ', title:'ㄹ 탈락', exceptionSide:'all', rule:'ㄹ-받침 выпадает перед -ㄴ/-ㅂ/-ㅅ. Меняются АБСОЛЮТНО ВСЕ глаголы с ㄹ на конце основы, исключений нет.'},
+  {key:'other', title:'Другие обычные глаголы', exceptionSide:'list', rule:'Не относятся ни к одной из этих групп — обычные глаголы для сравнения.'}
+];
+/* Дополняем полными списками известных исключений — в THEME_DATA.irregular есть только
+   слова, для которых написаны упражнения, а полный список исключений в языке шире. */
+var EXTRA_IRREGULAR_REFS = [
+  {word:'뽑다', correct:'뽑아요', regular:true},
+  {word:'접다', correct:'접어요', regular:true},
+  {word:'업다', correct:'업어요', regular:true},
+  {word:'싣다', correct:'실어요', regular:false},
+  {word:'들르다', correct:'들러요', regular:true}
 ];
 function renderIrregularWordTable(items){
   var half = Math.ceil(items.length/2);
@@ -2455,7 +2464,7 @@ function renderIrregularWordList(items){
 }
 function renderIrregularTable(){
   var seen = {}, byGroup = {};
-  (THEME_DATA.irregular || []).forEach(function(it){
+  (THEME_DATA.irregular || []).concat(EXTRA_IRREGULAR_REFS).forEach(function(it){
     if(seen[it.word]) return;
     seen[it.word] = true;
     var g = classifyIrregularWord(it.word);
@@ -2470,12 +2479,12 @@ function renderIrregularTable(){
     html += '<div class="rd-title" style="margin-top:18px">' + esc(g.title) + '</div>';
     html += '<div class="notes" style="margin-bottom:8px">' + esc(g.rule) + '</div>';
     if(g.exceptionSide === 'regular' && reg.length){
-      html += '<div class="notes" style="margin-bottom:4px"><b>Исключения (НЕ меняются):</b></div>' + renderIrregularWordList(reg);
+      html += '<div class="notes" style="margin-bottom:4px"><b>Исключения (НЕ меняются):</b></div>' + renderIrregularWordTable(reg);
     } else if(g.exceptionSide === 'irregular' && irr.length){
       html += '<div class="notes" style="margin-bottom:4px"><b>Исключения (меняются):</b></div>' + renderIrregularWordTable(irr);
-    } else if(g.exceptionSide === 'none' && irr.length){
-      html += renderIrregularWordTable(irr);
-    } else if(g.exceptionSide === 'none' && reg.length){
+    } else if(g.exceptionSide === 'all' && irr.length){
+      html += '<div class="notes">Например: ' + esc(irr[0].word) + ' → ' + esc(irr[0].correct) + '.</div>';
+    } else if(g.exceptionSide === 'list' && reg.length){
       html += renderIrregularWordList(reg);
     }
   });
