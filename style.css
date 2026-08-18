@@ -174,9 +174,10 @@ footer{ margin-top:26px; text-align:center; font-size:11px; color:var(--stone); 
 .ref-detail table{ width:100%; border-collapse:collapse; font-size:12.5px; }
 .ref-detail td{ padding:3px 6px 3px 0; border-bottom:1px solid var(--line); }
 .ref-detail th{ text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:0.5px; color:var(--stone); padding:4px 6px 6px 0; border-bottom:1px solid var(--line); }
-.num-combo-table{ width:auto; border-collapse:collapse; }
-.num-combo-table td, .num-combo-table th{ padding:3px 10px 3px 0; }
-.num-combo-table .num-col-gap{ padding-left:22px; border-left:1px solid var(--line); }
+.ref-detail .num-combo-table{ width:auto; border-collapse:collapse; font-size:16px; }
+.num-combo-table td, .num-combo-table th{ padding:5px 12px 5px 0; }
+.ref-detail .num-combo-table th{ font-size:12px; }
+.num-combo-table .num-col-gap{ padding-left:24px; border-left:1px solid var(--line); }
 .num-combo-table td:last-child, .num-combo-table th:last-child{ padding-right:0; }
 .num-counter{ color:var(--stone); }
 .ref-detail .rd-ex{ margin-bottom:6px; }
