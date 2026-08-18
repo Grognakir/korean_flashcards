@@ -338,6 +338,12 @@ function qExamReading(item){
 function qExamListening(item){
   return {type:'exlisten', item: item, options: shuffle(item.options.slice())};
 }
+/* ---- Экзамен: аудирование по текстам уроков (тема -> содержание) ---- */
+function qExamListeningPassage(item){
+  return {type:'exlistenpassage', item: item, phase:'topic',
+    topicOptions: shuffle(item.examQuestions.topic.options.slice()),
+    contentOptions: shuffle(item.examQuestions.content.options.slice())};
+}
 /* ---- Экзамен: чтение TOPIK (локальные файлы, вне git) ---- */
 function qExamTopikReading(item){
   return {type:'extopikread', item: item, options: shuffle(item.options.slice())};
@@ -594,6 +600,7 @@ function initState(){
     qaSubOpen: false,
     themeSub: 'counters', // 'counters' | 'numbers' | 'datetime' | 'honorific' | 'position'
     themeCounterMode: 'choice', // 'choice' | 'type' | 'translate' (только для счётных слов)
+    themeNumbersView: 'practice', // 'practice' | 'table' (только для Числительные)
     themeSubOpen: false,
     searchQuery: '',
     aiPanelOpen: false,
@@ -1029,7 +1036,7 @@ function advanceGrammarCards(){
 }
 
 /* ============ EXAM STANDALONE QUEUE ============ */
-var EXAM_FACTORY = { reading: qExamReading, ordering: qExamOrdering, construct: qExamConstruct, cloze: qExamCloze, listening: qExamListening, topikReading: qExamTopikReading };
+var EXAM_FACTORY = { reading: qExamReading, ordering: qExamOrdering, construct: qExamConstruct, cloze: qExamCloze, listening: qExamListening, topikReading: qExamTopikReading, listeningPassage: qExamListeningPassage };
 function resetExamQueue(){
   var pool = shuffle((EXAM_DATA[state.examSub] || []).slice());
   state.player.exwords = pool;
@@ -1555,7 +1562,12 @@ function goNextAfterAnswer(){
   if(state.view === 'session') advanceSession();
   else if(state.view === 'grammar' && state.grammarSub === 'cards') { advanceGrammarCards(); render(); }
   else if(state.view === 'grammar') { advanceGrammar(); render(); }
-  else if(state.view === 'exam') { advanceExam(); render(); }
+  else if(state.view === 'exam') {
+    var curExam = state.player.excurrent;
+    if(curExam && curExam.type === 'exlistenpassage' && curExam.phase === 'topic'){ curExam.phase = 'content'; state.ui = {}; }
+    else advanceExam();
+    render();
+  }
   else if(state.view === 'mockexam') { advanceMock(); render(); }
   else if(state.view === 'qa') { advanceQA(); render(); }
   else if(state.view === 'theme') { advanceTheme(); render(); }
@@ -1601,6 +1613,7 @@ function handleChoice(optValue){
   else if(q.type === 'grammar') isCorrect = (optValue === q.ex.correct);
   else if(q.type === 'exread') isCorrect = (optValue === q.item.correct);
   else if(q.type === 'exlisten') isCorrect = (optValue === q.item.correct);
+  else if(q.type === 'exlistenpassage') isCorrect = (optValue === q.item.examQuestions[q.phase].correct);
   else if(q.type === 'extopikread') isCorrect = (optValue === q.item.correct);
   else if(q.type === 'exorder') isCorrect = (optValue === q.correctLabel);
   else if(q.type === 'excloze') isCorrect = (optValue === q.item.correct);
@@ -1609,7 +1622,7 @@ function handleChoice(optValue){
   else if(q.type === 'response') isCorrect = (optValue === q.item.correct);
   else if(q.type === 'themecloze') isCorrect = itemAcceptsAnswer(q.item, optValue);
   else if(q.type === 'themedate') isCorrect = (optValue === q.item.correct);
-  if(q.type !== 'grammar' && q.type !== 'exread' && q.type !== 'exlisten' && q.type !== 'extopikread' &&
+  if(q.type !== 'grammar' && q.type !== 'exread' && q.type !== 'exlisten' && q.type !== 'exlistenpassage' && q.type !== 'extopikread' &&
      q.type !== 'exorder' && q.type !== 'excloze' &&
      q.type !== 'qword' && q.type !== 'qanswer' && q.type !== 'response' &&
      q.type !== 'themecloze' && q.type !== 'themedate') markWord(q.word.id, isCorrect ? 'known' : 'learning');
@@ -1882,6 +1895,26 @@ function renderExamListening(q){
   out += '</div>';
   return out;
 }
+function renderExamListeningPassage(q){
+  var item = q.item;
+  var sub = item.examQuestions[q.phase];
+  var options = q.phase === 'topic' ? q.topicOptions : q.contentOptions;
+  var out = '<div class="qcard"><div class="taegeuk-edge"></div>';
+  out += '<div class="stage-label" style="margin-bottom:8px">' + (q.phase === 'topic' ? 'Шаг 1 из 2 · тема' : 'Шаг 2 из 2 · содержание') + '</div>';
+  out += '<audio controls preload="none" style="width:100%;margin-bottom:16px" src="' + esc(encodeURI(item.audio)) + '"></audio>';
+  out += '<div class="q-translit mono" style="text-align:left;margin-bottom:12px">' + esc(sub.question) + '</div>';
+  options.forEach(function(opt){
+    var cls = 'opt';
+    if(state.ui.chosen){ if(opt === sub.correct) cls += ' correct'; else if(opt === state.ui.chosen) cls += ' wrong'; }
+    out += '<button class="' + cls + '" data-choice="' + esc(opt) + '"' + (state.ui.chosen?' disabled':'') + '>' + esc(opt) + '</button>';
+  });
+  if(state.ui.chosen){
+    out += '<div class="feedback ' + (state.ui.chosen===sub.correct?'ok':'bad') + '">' +
+      (state.ui.chosen===sub.correct ? 'Верно!' : ('Правильно: <span class="ans">'+esc(sub.correct)+'</span>')) + '</div>';
+  }
+  out += '</div>';
+  return out;
+}
 function renderExamTopikReading(q){
   var item = q.item;
   var out = '<div class="qcard"><div class="taegeuk-edge"></div>';
@@ -2127,6 +2160,7 @@ function renderQuestionCard(q){
   if(q.type === 'grammar') return renderGrammar(q);
   if(q.type === 'exread') return renderExamReading(q);
   if(q.type === 'exlisten') return renderExamListening(q);
+  if(q.type === 'exlistenpassage') return renderExamListeningPassage(q);
   if(q.type === 'extopikread') return renderExamTopikReading(q);
   if(q.type === 'exorder') return renderExamOrdering(q);
   if(q.type === 'excon') return renderExamConstruct(q);
@@ -2256,6 +2290,27 @@ function renderRefDetail(it){
     examples.forEach(function(ex){ html += '<div class="rd-ex"><span class="kr">' + esc(ex.kr) + '</span> — ' + esc(ex.ru) + '</div>'; });
   }
   html += '</div>';
+  return html;
+}
+function renderNumbersTable(){
+  var sinoRows = [0,1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100,1000,10000];
+  var nativeRows = [1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90];
+  var html = '<div class="qcard"><div class="ref-detail">';
+  html += '<div class="rd-title">한자어 · Корейско-китайские числительные</div>';
+  html += '<table><tr><th>Число</th><th>Чтение</th></tr>';
+  sinoRows.forEach(function(n){
+    html += '<tr><td class="mono">' + n + '</td><td class="kr">' + esc(sinoNumber(n)) + '</td></tr>';
+  });
+  html += '</table>';
+  html += '<div class="notes" style="margin-top:10px">Используются с минутами, датами, деньгами, этажами (100+) и большими числами.</div>';
+  html += '<div class="rd-title" style="margin-top:20px">고유어 · Исконно-корейские числительные</div>';
+  html += '<table><tr><th>Число</th><th>Отдельно</th><th>Перед счётным словом</th></tr>';
+  nativeRows.forEach(function(n){
+    html += '<tr><td class="mono">' + n + '</td><td class="kr">' + esc(nativeNumber(n)) + '</td><td class="kr">' + esc(nativeCounterNumber(n)) + '</td></tr>';
+  });
+  html += '</table>';
+  html += '<div class="notes" style="margin-top:10px">Форма перед счётным словом отличается только для 1, 2, 3, 4 и 20: 하나→한, 둘→두, 셋→세, 넷→네, 스물→스무.</div>';
+  html += '</div></div>';
   return html;
 }
 function renderGrammarReference(){
@@ -2482,6 +2537,7 @@ function renderExamView(){
 function renderExamTestMode(){
   var subs = [['reading','Чтение'],['ordering','Порядок'],['construct','Составь'],['cloze','Вставь']];
   if(EXAM_DATA.listening && EXAM_DATA.listening.length) subs.push(['listening','Аудирование']);
+  if(EXAM_DATA.listeningPassage && EXAM_DATA.listeningPassage.length) subs.push(['listeningPassage','Аудирование (уроки)']);
   if(EXAM_DATA.topikReading && EXAM_DATA.topikReading.length) subs.push(['topikReading','Чтение TOPIK']);
   var currentLabel = (subs.filter(function(s){ return s[0]===state.examSub; })[0] || subs[0])[1];
   var html = '<div class="panel"><div class="panel-row" id="examsub-toggle"><span class="label">Тип задания</span>' +
@@ -2966,6 +3022,12 @@ function renderThemeView(){
   html += '<div class="cat-grid' + (state.themeSubOpen?' open':'') + '">';
   subs.forEach(function(s){ html += '<div class="cat-chip' + (state.themeSub===s[0]?' active':'') + '" data-themesub="' + s[0] + '">' + esc(s[1]) + ' (' + esc(s[2]) + ')</div>'; });
   html += '</div></div>';
+  if(state.themeSub === 'numbers'){
+    html += '<div class="sub-toggle" style="margin-bottom:14px">' +
+      '<button data-numview="practice" class="' + (state.themeNumbersView==='practice'?'active':'') + '">Практика</button>' +
+      '<button data-numview="table" class="' + (state.themeNumbersView==='table'?'active':'') + '">Таблица</button></div>';
+    if(state.themeNumbersView === 'table') return html + renderNumbersTable();
+  }
   if(THEME_MODE_SECTIONS.indexOf(state.themeSub) !== -1){
     var modes = [['choice','Выбор'],['type','Впишите слово'],['translate','Переведите'],['mixed','Смешанный']];
     html += '<div class="sub-toggle" style="margin-bottom:14px;flex-wrap:wrap">';
@@ -3080,6 +3142,9 @@ function attachHandlers(){
   });
   document.querySelectorAll('[data-grefview]').forEach(function(el){
     el.onclick = function(){ state.grammarRefView = el.getAttribute('data-grefview'); render(); };
+  });
+  document.querySelectorAll('[data-numview]').forEach(function(el){
+    el.onclick = function(){ state.themeNumbersView = el.getAttribute('data-numview'); render(); };
   });
   document.querySelectorAll('[data-refitem]').forEach(function(el){
     el.onclick = function(){
@@ -3432,6 +3497,9 @@ async function boot(){
   EXAM_DATA = results[3]; QA_DATA = results[4]; THEME_DATA = results[5]; PHRASES_RAW = results[6];
   WRITING_DATA = results[7]; CURRICULUM_DATA = results[8];
   THEME_DATA.numbers = buildNumberExercises();
+  EXAM_DATA.listeningPassage = (CURRICULUM_DATA.lessons || [])
+    .map(function(l){ return l.listening; })
+    .filter(function(l){ return l && l.examQuestions; });
   EXAM_DATA.listening = await fetch('data/local/listening.json')
     .then(function(r){ return r.ok ? r.json() : []; })
     .catch(function(){ return []; });
