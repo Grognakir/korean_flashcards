@@ -3410,6 +3410,15 @@ function attachHandlers(){
   }
 }
 
+document.addEventListener('keydown', function(e){
+  if(e.key !== 'Enter') return;
+  var form = document.getElementById('type-form');
+  if(!form) return;
+  e.preventDefault();
+  var input = document.getElementById('type-input');
+  handleTypeSubmit(input ? input.value : '');
+});
+
 async function boot(){
   var files = ['data/words.json','data/grammar.json','data/grammar-exercises.json',
                'data/exam.json','data/qa.json','data/theme.json','data/phrases.json','data/writing.json','data/curriculum.json'];
