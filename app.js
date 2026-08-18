@@ -1974,7 +1974,7 @@ function renderThemeCloze(q){
   var out = '<div class="qcard"><div class="taegeuk-edge"></div>';
   out += baseFormLabel(item);
   out += '<div class="q-translit mono" style="margin-bottom:10px">выберите правильный вариант</div>';
-  if(state.themeSub === 'counters') out += '<div class="sent-ru">' + esc(item.ru) + '</div>';
+  if(state.themeSub === 'counters' || state.themeSub === 'position') out += '<div class="sent-ru">' + esc(item.ru) + '</div>';
   var mid = state.ui.chosen ? ('<span class="gap-fill kr">' + esc(state.ui.chosen) + '</span>') : '<span class="gap"></span>';
   out += '<div class="sent-blank kr" style="font-size:17px">' + esc(item.before) + mid + esc(item.after) + '</div>';
   q.options.forEach(function(opt){
@@ -2883,12 +2883,13 @@ function renderSearchView(){
 }
 
 function renderThemeView(){
-  var subs = [['counters','Счётные слова'],['numbers','Числительные'],['datetime','Даты и время'],['honorific','Уважительно'],['position','Место'],['irregular','Неправильные глаголы']];
-  var currentLabel = (subs.filter(function(s){ return s[0]===state.themeSub; })[0] || subs[0])[1];
+  var subs = [['counters','단위 명사','Счётные слова'],['numbers','숫자','Числительные'],['datetime','날짜와 시간','Даты и время'],['honorific','높임말','Уважительно'],['position','위치','Место'],['irregular','불규칙 동사','Неправильные глаголы']];
+  var currentSub = subs.filter(function(s){ return s[0]===state.themeSub; })[0] || subs[0];
+  var currentLabel = currentSub[1] + ' (' + currentSub[2] + ')';
   var html = '<div class="panel"><div class="panel-row" id="themesub-toggle"><span class="label">Тема</span>' +
     '<span class="value mono">' + esc(currentLabel) + '<span class="chev' + (state.themeSubOpen?' open':'') + '">▾</span></span></div>';
   html += '<div class="cat-grid' + (state.themeSubOpen?' open':'') + '">';
-  subs.forEach(function(s){ html += '<div class="cat-chip' + (state.themeSub===s[0]?' active':'') + '" data-themesub="' + s[0] + '">' + s[1] + '</div>'; });
+  subs.forEach(function(s){ html += '<div class="cat-chip' + (state.themeSub===s[0]?' active':'') + '" data-themesub="' + s[0] + '">' + esc(s[1]) + ' (' + esc(s[2]) + ')</div>'; });
   html += '</div></div>';
   if(THEME_MODE_SECTIONS.indexOf(state.themeSub) !== -1){
     var modes = [['choice','Выбор'],['type','Впишите слово'],['translate','Переведите'],['mixed','Смешанный']];
