@@ -2085,6 +2085,10 @@ function renderCounterTranslate(q){
   out += baseFormLabel(item);
   out += '<div class="q-translit mono" style="margin-bottom:10px">переведите предложение на корейский</div>';
   out += '<div class="notes" style="font-size:16px;margin-bottom:16px">' + esc(item.ru) + '</div>';
+  if(item.hints && item.hints.length){
+    out += '<div class="hint" style="margin-top:0;margin-bottom:14px">Подсказки: ' +
+      esc(item.hints.map(function(h){ return h.kr + ' — ' + h.ru; }).join(' · ')) + '</div>';
+  }
   out += '<form class="type-row" id="type-form"><input class="kr" id="type-input" value="' + esc(state.ui.typedValue||'') + '" placeholder="한국어 문장" autocomplete="off"' + (state.ui.typedResult?' disabled':'') + '/>' +
     '<button type="submit">' + (state.ui.typedResult ? 'Дальше' : 'Ответить') + '</button></form>';
   if(state.ui.typedResult){
