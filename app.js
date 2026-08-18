@@ -3414,8 +3414,11 @@ document.addEventListener('keydown', function(e){
   if(e.key !== 'Enter') return;
   var form = document.getElementById('type-form');
   if(!form) return;
-  e.preventDefault();
   var input = document.getElementById('type-input');
+  // первый Enter отправляется нативной формой (пока поле активно);
+  // здесь ловим только повторный Enter, когда поле уже отключено
+  if(input && !input.disabled) return;
+  e.preventDefault();
   handleTypeSubmit(input ? input.value : '');
 });
 
