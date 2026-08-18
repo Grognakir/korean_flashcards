@@ -3685,7 +3685,7 @@ async function boot(){
   var files = ['data/words.json','data/grammar.json','data/grammar-exercises.json',
                'data/exam.json','data/qa.json','data/theme.json','data/phrases.json','data/writing.json','data/curriculum.json'];
   var results = await Promise.all(files.map(function(f){
-    return fetch(f).then(function(r){ return r.json(); });
+    return fetch(f, {cache:'no-store'}).then(function(r){ return r.json(); });
   }));
   RAW = results[0]; GRAMMAR_TOPICS = results[1]; GRAMMAR_EXERCISES = results[2];
   EXAM_DATA = results[3]; QA_DATA = results[4]; THEME_DATA = results[5]; PHRASES_RAW = results[6];
