@@ -123,6 +123,7 @@ header{ display:flex; align-items:center; justify-content:space-between; margin-
 .wblank-input.ok{ border-bottom-color:var(--green); color:var(--green); font-weight:700; }
 .wblank-input.bad{ border-bottom-color:var(--red); color:var(--red); font-weight:700; }
 .wblank-input:disabled{ opacity:1; }
+.wblank-correct{ display:inline-block; margin:2px 3px; font-size:12.5px; font-weight:700; color:var(--green); }
 .writing-textarea{ display:block; width:100%; min-height:160px; padding:13px 14px; border-radius:12px; border:1.5px solid var(--line); font-size:15px; line-height:1.6; font-family:inherit; outline:none; background:var(--paper); resize:vertical; }
 .writing-textarea:focus{ border-color:var(--ink); }
 .dialogue-line{ margin-bottom:10px; }

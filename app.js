@@ -618,7 +618,7 @@ function initState(){
     mockExam: { phase: 'pick', examKey: null, queue: [], index: 0,
       listeningCorrect: 0, listeningTotal: 0, readingCorrect: 0, readingTotal: 0 },
     writingPractice: { phase: 'pick', topicKey: null, combos: [], iterIndex: 0,
-      checked: false, blankCorrect: {}, totalCorrect: 0, totalBlanks: 0, freeText: '' },
+      checked: false, blankCorrect: {}, blankTyped: {}, totalCorrect: 0, totalBlanks: 0, freeText: '' },
     speakingPractice: { phase: 'pick', topicId: null, iterIndex: 0,
       checked: false, blankCorrect: {}, totalCorrect: 0, totalBlanks: 0 },
     listeningPractice: { phase: 'pick', topicId: null, textShown: false },
@@ -1124,7 +1124,7 @@ function startWritingTopic(key){
   if(!data) return;
   var combos = shuffle(data.combos.slice()).slice(0, 3);
   state.writingPractice = { phase:'read', topicKey:key, combos:combos, iterIndex:0,
-    checked:false, blankCorrect:{}, totalCorrect:0, totalBlanks:0, freeText:'' };
+    checked:false, blankCorrect:{}, blankTyped:{}, totalCorrect:0, totalBlanks:0, freeText:'' };
 }
 function writingTopicData(){
   return WRITING_DATA[state.writingPractice.topicKey];
@@ -1151,6 +1151,7 @@ function checkWritingBlanks(){
     var typed = input ? input.value.trim() : '';
     var isRight = typed === findWritingChunkText(data, cid);
     wp.blankCorrect[cid] = isRight;
+    wp.blankTyped[cid] = typed;
     if(isRight) correct++;
   });
   wp.totalCorrect += correct;
@@ -1161,6 +1162,7 @@ function advanceWritingIteration(){
   var wp = state.writingPractice;
   wp.checked = false;
   wp.blankCorrect = {};
+  wp.blankTyped = {};
   wp.iterIndex++;
   wp.phase = wp.iterIndex >= wp.combos.length ? 'write' : 'blank';
 }
@@ -2822,16 +2824,21 @@ function renderWritingBlank(){
     return para.map(function(seg){
       if(seg.c && comboSet[seg.c]){
         var cls = 'wblank-input' + (wp.checked ? (wp.blankCorrect[seg.c] ? ' ok' : ' bad') : '');
-        return '<input class="' + cls + '" id="wblank-' + seg.c + '" autocomplete="off"' + (wp.checked?' disabled':'') + '/>';
+        var val = wp.checked ? ' value="' + esc(wp.blankTyped[seg.c] || '') + '"' : '';
+        var out = '<input class="' + cls + '" id="wblank-' + seg.c + '" autocomplete="off"' + val + (wp.checked?' disabled':'') + '/>';
+        if(wp.checked && !wp.blankCorrect[seg.c]){
+          out += '<span class="wblank-correct">→ ' + esc(findWritingChunkText(data, seg.c)) + '</span>';
+        }
+        return out;
       }
       return esc(seg.t);
     }).join('');
   }).join('<br><br>');
   html += '</div>';
   if(wp.checked){
-    var wrongList = combo.filter(function(cid){ return !wp.blankCorrect[cid]; });
-    html += wrongList.length
-      ? '<div class="feedback bad">Правильно: ' + wrongList.map(function(cid){ return esc(findWritingChunkText(data, cid)); }).join(' · ') + '</div>'
+    var wrongCount = combo.filter(function(cid){ return !wp.blankCorrect[cid]; }).length;
+    html += wrongCount
+      ? '<div class="feedback bad">Ошибок: ' + wrongCount + ' из ' + combo.length + '. Ваш ответ и правильный вариант показаны над каждым пропуском.</div>'
       : '<div class="feedback ok">Всё верно!</div>';
     html += '<div class="controls"><button class="btn btn-primary" id="writing-next-iter">Дальше</button></div>';
   } else {
