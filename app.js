@@ -601,6 +601,7 @@ function initState(){
     themeSub: 'counters', // 'counters' | 'numbers' | 'datetime' | 'honorific' | 'position'
     themeCounterMode: 'choice', // 'choice' | 'type' | 'translate' (только для счётных слов)
     themeNumbersView: 'practice', // 'practice' | 'table' (только для Числительные)
+    themeDatetimeView: 'practice', // 'practice' | 'table' (только для Даты и время)
     themeSubOpen: false,
     searchQuery: '',
     aiPanelOpen: false,
@@ -2317,6 +2318,25 @@ function renderNumbersTable(){
   html += '</div></div>';
   return html;
 }
+function renderDatetimeTable(){
+  var days = [['월요일','понедельник'],['화요일','вторник'],['수요일','среда'],['목요일','четверг'],['금요일','пятница'],['토요일','суббота'],['일요일','воскресенье']];
+  var times = [['아침','утро'],['오전','до обеда (AM)'],['점심','обед / полдень'],['오후','после обеда (PM)'],['저녁','вечер'],['밤','ночь']];
+  var rows = Math.max(days.length, times.length);
+  var html = '<div class="qcard"><div class="ref-detail">';
+  html += '<table class="num-combo-table"><tr><th>요일</th><th>День недели</th><th class="num-col-gap">시간</th><th>Время суток</th></tr>';
+  for(var i=0;i<rows;i++){
+    var d = days[i], t = times[i];
+    html += '<tr>';
+    html += d ? '<td class="kr">' + esc(d[0]) + '</td><td>' + esc(d[1]) + '</td>' : '<td></td><td></td>';
+    html += t ? '<td class="kr num-col-gap">' + esc(t[0]) + '</td><td>' + esc(t[1]) + '</td>' : '<td class="num-col-gap"></td><td></td>';
+    html += '</tr>';
+  }
+  html += '</table>';
+  html += '<div class="notes" style="margin-top:14px">무슨 요일이에요? — Какой сегодня день недели?</div>';
+  html += '<div class="notes" style="margin-top:6px">오전/오후 ставится перед часами: 오전 9시 — 9 утра, 오후 9시 — 9 вечера.</div>';
+  html += '</div></div>';
+  return html;
+}
 function renderGrammarReference(){
   var html = '<div class="panel"><div class="panel-row" id="gcat-toggle"><span class="label">Темы</span>' +
     '<span class="value mono">' + (state.grammarSelected.length===GRAMMAR_CATS.length ? 'все' : state.grammarSelected.length + ' из ' + GRAMMAR_CATS.length) +
@@ -3032,6 +3052,12 @@ function renderThemeView(){
       '<button data-numview="table" class="' + (state.themeNumbersView==='table'?'active':'') + '">Таблица</button></div>';
     if(state.themeNumbersView === 'table') return html + renderNumbersTable();
   }
+  if(state.themeSub === 'datetime'){
+    html += '<div class="sub-toggle" style="margin-bottom:14px">' +
+      '<button data-dtview="practice" class="' + (state.themeDatetimeView==='practice'?'active':'') + '">Практика</button>' +
+      '<button data-dtview="table" class="' + (state.themeDatetimeView==='table'?'active':'') + '">Таблица</button></div>';
+    if(state.themeDatetimeView === 'table') return html + renderDatetimeTable();
+  }
   if(THEME_MODE_SECTIONS.indexOf(state.themeSub) !== -1){
     var modes = [['choice','Выбор'],['type','Впишите слово'],['translate','Переведите'],['mixed','Смешанный']];
     html += '<div class="sub-toggle" style="margin-bottom:14px;flex-wrap:wrap">';
@@ -3149,6 +3175,9 @@ function attachHandlers(){
   });
   document.querySelectorAll('[data-numview]').forEach(function(el){
     el.onclick = function(){ state.themeNumbersView = el.getAttribute('data-numview'); render(); };
+  });
+  document.querySelectorAll('[data-dtview]').forEach(function(el){
+    el.onclick = function(){ state.themeDatetimeView = el.getAttribute('data-dtview'); render(); };
   });
   document.querySelectorAll('[data-refitem]').forEach(function(el){
     el.onclick = function(){
