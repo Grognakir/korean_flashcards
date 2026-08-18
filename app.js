@@ -2662,7 +2662,7 @@ function renderListeningShow(){
   var html = '<div class="qcard"><div class="meaning" style="text-align:center;font-size:18px">' + found.lesson.num + '과 ' + esc(found.lesson.titleKr) + ' (' + esc(found.topic.titleRu) + ')</div>';
   html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">';
   html += '<audio controls preload="none" style="flex:1;min-width:0" src="' + esc(encodeURI(found.topic.audio)) + '"></audio>';
-  html += '<button class="btn" id="listening-toggle-text">' + (lp.textShown ? 'Скрыть текст' : 'Показать текст') + '</button>';
+  html += '<button class="btn-icon-sm" id="listening-toggle-text" title="' + (lp.textShown ? 'Скрыть текст' : 'Показать текст') + '">' + (lp.textShown ? '🙈' : '👁') + '</button>';
   html += '</div>';
   if(lp.textShown){
     html += '<div class="dialogue-reveal">' + renderDialogueLines(found.topic.lines, null, false, {}) + '</div>';
