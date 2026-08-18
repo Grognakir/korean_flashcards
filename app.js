@@ -2423,14 +2423,36 @@ function classifyIrregularWord(word){
   if(final === 0 && medial === 18) return 'ㅡ';
   return 'other';
 }
+/* exceptionSide: какая сторона — редкая/особая для этой буквы, её и показываем как "Исключения".
+   'regular'   — меняется БОЛЬШИНСТВО (ㅂ, 르): исключения — те, что НЕ меняются.
+   'irregular' — меняется МЕНЬШИНСТВО (ㄷ): исключения — те, что меняются (остальные — обычная норма, не перечисляем).
+   'none'      — меняются ВСЕ без исключений (ㅡ, ㄹ): показываем полный список. */
 var IRREGULAR_GROUPS = [
-  {key:'ㅂ', title:'ㅂ 불규칙', rule:'ㅂ + гласная → 워 (돕다/곱다 → 와). Меняется БОЛЬШИНСТВО слов с ㅂ на конце основы — кроме нескольких обычных исключений ниже.'},
-  {key:'ㄷ', title:'ㄷ 불규칙', rule:'ㄷ + гласная → ㄹ. Здесь наоборот: меняется только НЕБОЛЬШАЯ группа слов, остальные глаголы с ㄷ на конце — обычные (см. исключения ниже).'},
-  {key:'르', title:'르 불규칙', rule:'르 → ㄹㄹ (다르다 → 달라요). Меняются ПОЧТИ ВСЕ глаголы на -르다 — кроме одного-двух исключений ниже.'},
-  {key:'ㅡ', title:'ㅡ 탈락', rule:'ㅡ выпадает перед гласной (쓰다 → 써요). Меняются АБСОЛЮТНО ВСЕ глаголы на -으다/-트다/-프다, исключений нет.'},
-  {key:'ㄹ', title:'ㄹ 탈락', rule:'ㄹ-받침 выпадает перед -ㄴ/-ㅂ/-ㅅ (살다 → 삽니다, 사세요). Меняются АБСОЛЮТНО ВСЕ глаголы с ㄹ на конце основы, исключений нет.'},
-  {key:'other', title:'Другие обычные глаголы', rule:'Не относятся ни к одной из этих групп — обычные глаголы для сравнения.'}
+  {key:'ㅂ', title:'ㅂ 불규칙', exceptionSide:'regular', rule:'ㅂ + гласная → 워 (돕다/곱다 → 와). Меняется БОЛЬШИНСТВО слов с ㅂ на конце основы — правило предсказуемо, поэтому важны только исключения, которые НЕ меняются.'},
+  {key:'ㄷ', title:'ㄷ 불규칙', exceptionSide:'irregular', rule:'ㄷ + гласная → ㄹ. Здесь наоборот: меняется только НЕБОЛЬШАЯ группа слов, это и есть исключения — остальные глаголы с ㄷ на конце обычные (это норма, не список).'},
+  {key:'르', title:'르 불규칙', exceptionSide:'regular', rule:'르 → ㄹㄹ (다르다 → 달라요). Меняются ПОЧТИ ВСЕ глаголы на -르다 — важны только исключения, которые НЕ меняются.'},
+  {key:'ㅡ', title:'ㅡ 탈락', exceptionSide:'none', rule:'ㅡ выпадает перед гласной (쓰다 → 써요). Меняются АБСОЛЮТНО ВСЕ глаголы на -으다/-트다/-프다, исключений нет.'},
+  {key:'ㄹ', title:'ㄹ 탈락', exceptionSide:'none', rule:'ㄹ-받침 выпадает перед -ㄴ/-ㅂ/-ㅅ (살다 → 삽니다, 사세요). Меняются АБСОЛЮТНО ВСЕ глаголы с ㄹ на конце основы, исключений нет.'},
+  {key:'other', title:'Другие обычные глаголы', exceptionSide:'none', rule:'Не относятся ни к одной из этих групп — обычные глаголы для сравнения.'}
 ];
+function renderIrregularWordTable(items){
+  var half = Math.ceil(items.length/2);
+  var colA = items.slice(0, half), colB = items.slice(half);
+  var rows = Math.max(colA.length, colB.length);
+  var html = '<table class="num-combo-table"><tr><th>Слово</th><th>Форма</th><th class="num-col-gap">Слово</th><th>Форма</th></tr>';
+  for(var i=0;i<rows;i++){
+    var a = colA[i], b = colB[i];
+    html += '<tr>';
+    html += a ? '<td class="kr">' + esc(a.word) + '</td><td class="kr">' + esc(a.correct) + '</td>' : '<td></td><td></td>';
+    html += b ? '<td class="kr num-col-gap">' + esc(b.word) + '</td><td class="kr">' + esc(b.correct) + '</td>' : '<td class="num-col-gap"></td><td></td>';
+    html += '</tr>';
+  }
+  html += '</table>';
+  return html;
+}
+function renderIrregularWordList(items){
+  return '<div class="notes">' + items.map(function(it){ return esc(it.word) + ' — ' + esc(it.correct); }).join(', ') + '</div>';
+}
 function renderIrregularTable(){
   var seen = {}, byGroup = {};
   (THEME_DATA.irregular || []).forEach(function(it){
@@ -2445,27 +2467,16 @@ function renderIrregularTable(){
     if(!items.length) return;
     var irr = items.filter(function(it){ return !it.regular; });
     var reg = items.filter(function(it){ return it.regular; });
-    var countLabel = irr.length && reg.length ? irr.length + ' + ' + reg.length + ' обычных'
-      : irr.length ? String(irr.length) : reg.length + ' обычных';
-    html += '<div class="rd-title" style="margin-top:18px">' + esc(g.title) + ' (' + countLabel + ')</div>';
+    html += '<div class="rd-title" style="margin-top:18px">' + esc(g.title) + '</div>';
     html += '<div class="notes" style="margin-bottom:8px">' + esc(g.rule) + '</div>';
-    if(irr.length){
-      var half = Math.ceil(irr.length/2);
-      var colA = irr.slice(0, half), colB = irr.slice(half);
-      var rows = Math.max(colA.length, colB.length);
-      html += '<table class="num-combo-table"><tr><th>Слово</th><th>Форма</th><th class="num-col-gap">Слово</th><th>Форма</th></tr>';
-      for(var i=0;i<rows;i++){
-        var a = colA[i], b = colB[i];
-        html += '<tr>';
-        html += a ? '<td class="kr">' + esc(a.word) + '</td><td class="kr">' + esc(a.correct) + '</td>' : '<td></td><td></td>';
-        html += b ? '<td class="kr num-col-gap">' + esc(b.word) + '</td><td class="kr">' + esc(b.correct) + '</td>' : '<td class="num-col-gap"></td><td></td>';
-        html += '</tr>';
-      }
-      html += '</table>';
-    }
-    if(reg.length){
-      html += '<div class="notes" style="margin-top:6px">' + (irr.length ? 'НЕ меняются (исключения): ' : '') +
-        reg.map(function(it){ return esc(it.word) + ' — ' + esc(it.correct); }).join(', ') + '</div>';
+    if(g.exceptionSide === 'regular' && reg.length){
+      html += '<div class="notes" style="margin-bottom:4px"><b>Исключения (НЕ меняются):</b></div>' + renderIrregularWordList(reg);
+    } else if(g.exceptionSide === 'irregular' && irr.length){
+      html += '<div class="notes" style="margin-bottom:4px"><b>Исключения (меняются):</b></div>' + renderIrregularWordTable(irr);
+    } else if(g.exceptionSide === 'none' && irr.length){
+      html += renderIrregularWordTable(irr);
+    } else if(g.exceptionSide === 'none' && reg.length){
+      html += renderIrregularWordList(reg);
     }
   });
   html += '</div></div>';
