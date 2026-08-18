@@ -2296,20 +2296,20 @@ function renderNumbersTable(){
   var sinoRows = [0,1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90,100,1000,10000];
   var nativeRows = [1,2,3,4,5,6,7,8,9,10,20,30,40,50,60,70,80,90];
   var html = '<div class="qcard"><div class="ref-detail">';
-  html += '<div class="rd-title">한자어 · Корейско-китайские числительные</div>';
-  html += '<table><tr><th>Число</th><th>Чтение</th></tr>';
+  html += '<div class="num-tables-row">';
+  html += '<div><div class="rd-title">한자어</div><table><tr><th>№</th><th>Чтение</th></tr>';
   sinoRows.forEach(function(n){
     html += '<tr><td class="mono">' + n + '</td><td class="kr">' + esc(sinoNumber(n)) + '</td></tr>';
   });
-  html += '</table>';
-  html += '<div class="notes" style="margin-top:10px">Используются с минутами, датами, деньгами, этажами (100+) и большими числами.</div>';
-  html += '<div class="rd-title" style="margin-top:20px">고유어 · Исконно-корейские числительные</div>';
-  html += '<table><tr><th>Число</th><th>Отдельно</th><th>Перед счётным словом</th></tr>';
+  html += '</table></div>';
+  html += '<div><div class="rd-title">고유어</div><table><tr><th>№</th><th>Само</th><th>+ счётное</th></tr>';
   nativeRows.forEach(function(n){
     html += '<tr><td class="mono">' + n + '</td><td class="kr">' + esc(nativeNumber(n)) + '</td><td class="kr">' + esc(nativeCounterNumber(n)) + '</td></tr>';
   });
-  html += '</table>';
-  html += '<div class="notes" style="margin-top:10px">Форма перед счётным словом отличается только для 1, 2, 3, 4 и 20: 하나→한, 둘→두, 셋→세, 넷→네, 스물→스무.</div>';
+  html += '</table></div>';
+  html += '</div>';
+  html += '<div class="notes" style="margin-top:14px">한자어 — с минутами, датами, деньгами, этажами (100+) и большими числами.</div>';
+  html += '<div class="notes" style="margin-top:6px">고유어 перед счётным словом меняется только у 1, 2, 3, 4 и 20: 하나→한, 둘→두, 셋→세, 넷→네, 스물→스무.</div>';
   html += '</div></div>';
   return html;
 }
