@@ -113,6 +113,77 @@ var SHORT_NAMES = {
 };
 function shortCat(c){ return SHORT_NAMES[c] || c; }
 function shortGrammarCat(c){ return c.replace(/^\d+\.\s*/, ''); }
+var CATEGORY_KR = {
+  'Глаголы': '동사',
+  'Прилагательные': '형용사',
+  'Неправильные глаголы/прилагательные — ㄷ (ㄷ받침 → ㄹ перед гласной)': 'ㄷ 불규칙',
+  'Неправильные глаголы/прилагательные — ㄹ받침 (ведут себя по-другому только в некоторых окончаниях)': 'ㄹ받침 불규칙',
+  'Неправильные глаголы/прилагательные — ㅂ (ㅂ받침 → 우/오 перед гласной)': 'ㅂ 불규칙',
+  'Неправильные глаголы/прилагательные — ㅡ (выпадение гласной + отдельно 르-неправильные)': '으/르 불규칙',
+  'Местоимения': '대명사',
+  'Вопросительные слова': '의문사',
+  'Овощи': '채소',
+  'Фрукты': '과일',
+  'Продукты и еда': '음식',
+  'Учёба': '공부',
+  'Бытовые предметы': '생활용품',
+  'Бытовые дела': '집안일',
+  'Электроника': '전자제품',
+  'Семья и обращения': '가족',
+  'Спорт': '운동',
+  'Профессии': '직업',
+  'Места': '장소',
+  'Положение в пространстве': '위치',
+  'Части тела': '신체',
+  'Одежда и внешний вид': '옷과 외모',
+  'Прочее': '기타',
+  'Бизнес и экономика': '경제',
+  'Страны': '나라',
+  'Числительные': '숫자',
+  'Дни недели и даты': '요일과 날짜',
+  'Время суток': '하루 때',
+  'Временные наречия': '시간 부사',
+  'Наречия (образа действия)': '부사',
+  'Союзы и связки': '접속사',
+  'Грамматические термины': '문법 용어',
+  'Частицы': '조사',
+  'Соединительные окончания (연결어미)': '연결어미',
+  'Счётные слова (의존명사)': '의존명사',
+  'Больница и отделения': '병원',
+  'Лекарства': '약',
+  'Жанры фильмов': '영화 장르',
+  'Разговорные выражения': '회화 표현',
+  'Магазины': '가게',
+  'Цвета': '색깔'
+};
+function catLabel(c){ return CATEGORY_KR[c] ? CATEGORY_KR[c] + ' (' + shortCat(c) + ')' : shortCat(c); }
+var GRAMMAR_CATEGORY_KR = {
+  '1. Частицы существительных (조사)': '조사',
+  '2. Именное сказуемое (N이다) и его формы': 'N이다',
+  '3. Время и вид глагола': '시제',
+  '4. Отрицание': '부정',
+  '5. Соединительные окончания (связывают два действия/предложения)': '연결어미',
+  '6. Модальность — возможность, необходимость, желание, разрешение': '양태',
+  '7. Обращение к собеседнику — просьбы, предложения, вопросы-подтверждения': '청유·요청',
+  '8. Определительные формы (перед существительным, "какой/который")': '관형사형',
+  '9. Опыт и попытка': '경험과 시도',
+  '10. Вежливость к третьему лицу (почтительная речь, 존댓말 о ком-то)': '존댓말',
+  '11. Неправильные спряжения (불규칙)': '불규칙'
+};
+function grammarCatLabel(c){ return GRAMMAR_CATEGORY_KR[c] ? GRAMMAR_CATEGORY_KR[c] + ' (' + shortGrammarCat(c) + ')' : shortGrammarCat(c); }
+var PHRASE_CATEGORY_KR = {
+  'Ресторан и кафе': '식당과 카페',
+  'Такси': '택시',
+  'Больница и аптека': '병원과 약국',
+  'Магазин и покупки': '가게와 쇼핑',
+  'Аэропорт и самолёт': '공항과 비행기',
+  'Отель': '호텔',
+  'Общественный транспорт': '대중교통',
+  'Вопрос на улице и просьба о помощи': '길 묻기와 도움 요청',
+  'Знакомство и small talk': '소개와 잡담',
+  'Экстренные ситуации': '비상 상황'
+};
+function phraseCatLabel(c){ return PHRASE_CATEGORY_KR[c] ? PHRASE_CATEGORY_KR[c] + ' (' + c + ')' : c; }
 var LESSON_CATEGORIES = {
   // 1과: N이/가, N은/는①, N도, N이/가 아니다, N입니다 — самопредставление, кто есть кто, откуда
   1: ['Местоимения','Страны','Профессии','Разговорные выражения'],
@@ -2108,7 +2179,7 @@ function renderWordsView(){
     '<span class="chev' + (state.wordsCatOpen?' open':'') + '">▾</span></span></div>';
   html += '<div class="cat-actions' + (state.wordsCatOpen?' open':'') + '"><button id="cat-all">Выбрать все</button><button id="cat-none">Снять все</button></div>';
   html += '<div class="cat-grid' + (state.wordsCatOpen?' open':'') + '">';
-  CATEGORIES.forEach(function(c){ html += '<div class="cat-chip' + (state.wordsSelected.indexOf(c)!==-1?' active':'') + '" data-cat="' + esc(c) + '">' + esc(shortCat(c)) + '</div>'; });
+  CATEGORIES.forEach(function(c){ html += '<div class="cat-chip' + (state.wordsSelected.indexOf(c)!==-1?' active':'') + '" data-cat="' + esc(c) + '">' + esc(catLabel(c)) + '</div>'; });
   html += '</div></div>';
 
   var modes = [['cards','Карточки'],['kr2ru','Слово→Перевод'],['ru2kr','Перевод→Слово'],['sentchoice','Предложение (выбор)'],['spell','Написание'],['senttype','Предложение (ввод)'],['antsyn','Антонимы/синонимы']];
@@ -2136,7 +2207,7 @@ function renderPhrasesView(){
     '<span class="chev' + (state.phrasesCatOpen?' open':'') + '">▾</span></span></div>';
   html += '<div class="cat-actions' + (state.phrasesCatOpen?' open':'') + '"><button id="phcat-all">Выбрать все</button><button id="phcat-none">Снять все</button></div>';
   html += '<div class="cat-grid' + (state.phrasesCatOpen?' open':'') + '">';
-  PHRASE_CATEGORIES.forEach(function(c){ html += '<div class="cat-chip' + (state.phrasesSelected.indexOf(c)!==-1?' active':'') + '" data-phcat="' + esc(c) + '">' + esc(shortCat(c)) + '</div>'; });
+  PHRASE_CATEGORIES.forEach(function(c){ html += '<div class="cat-chip' + (state.phrasesSelected.indexOf(c)!==-1?' active':'') + '" data-phcat="' + esc(c) + '">' + esc(phraseCatLabel(c)) + '</div>'; });
   html += '</div></div>';
 
   var modes = [['cards','Карточки'],['kr2ru','Фраза→Перевод'],['ru2kr','Перевод→Фраза']];
@@ -2189,7 +2260,7 @@ function renderGrammarReference(){
     '<span class="chev' + (state.grammarCatOpen?' open':'') + '">▾</span></span></div>';
   html += '<div class="cat-actions' + (state.grammarCatOpen?' open':'') + '"><button id="gcat-all">Выбрать все</button><button id="gcat-none">Снять все</button></div>';
   html += '<div class="cat-grid' + (state.grammarCatOpen?' open':'') + '">';
-  GRAMMAR_CATS.forEach(function(c){ html += '<div class="cat-chip" data-gcat="' + esc(c) + '" style="' + (state.grammarSelected.indexOf(c)!==-1?'':'opacity:.5') + '">' + esc(shortGrammarCat(c)) + '</div>'; });
+  GRAMMAR_CATS.forEach(function(c){ html += '<div class="cat-chip" data-gcat="' + esc(c) + '" style="' + (state.grammarSelected.indexOf(c)!==-1?'':'opacity:.5') + '">' + esc(grammarCatLabel(c)) + '</div>'; });
   html += '</div></div>';
 
   html += '<div class="sub-toggle" style="margin-bottom:14px">' +
@@ -2226,7 +2297,7 @@ function renderGrammarReference(){
     GRAMMAR_TOPICS.forEach(function(topic){
       if(state.grammarSelected.indexOf(topic.category) === -1) return;
       var topicOpen = !!state.grammarTopicOpen[topic.category];
-      html += '<div class="topic-header" data-topictoggle="' + esc(topic.category) + '"><span>' + esc(shortGrammarCat(topic.category)) + '</span><span class="chev' + (topicOpen?' open':'') + '">▾</span></div>';
+      html += '<div class="topic-header" data-topictoggle="' + esc(topic.category) + '"><span>' + esc(grammarCatLabel(topic.category)) + '</span><span class="chev' + (topicOpen?' open':'') + '">▾</span></div>';
       if(topicOpen){
         var lastGroup = null;
         topic.items.forEach(function(it){
@@ -2248,7 +2319,7 @@ function renderGrammarPractice(){
     '<span class="chev' + (state.grammarCatOpen?' open':'') + '">▾</span></span></div>';
   html += '<div class="cat-actions' + (state.grammarCatOpen?' open':'') + '"><button id="gcat-all">Выбрать все</button><button id="gcat-none">Снять все</button></div>';
   html += '<div class="cat-grid' + (state.grammarCatOpen?' open':'') + '">';
-  GRAMMAR_CATS.forEach(function(c){ html += '<div class="cat-chip' + (state.grammarSelected.indexOf(c)!==-1?' active':'') + '" data-gcat="' + esc(c) + '">' + esc(shortGrammarCat(c)) + '</div>'; });
+  GRAMMAR_CATS.forEach(function(c){ html += '<div class="cat-chip' + (state.grammarSelected.indexOf(c)!==-1?' active':'') + '" data-gcat="' + esc(c) + '">' + esc(grammarCatLabel(c)) + '</div>'; });
   html += '</div></div>';
   var pool = state.player.gwords || [];
   if(pool.length){
@@ -2265,7 +2336,7 @@ function renderGrammarCards(){
     '<span class="chev' + (state.grammarCatOpen?' open':'') + '">▾</span></span></div>';
   html += '<div class="cat-actions' + (state.grammarCatOpen?' open':'') + '"><button id="gcat-all">Выбрать все</button><button id="gcat-none">Снять все</button></div>';
   html += '<div class="cat-grid' + (state.grammarCatOpen?' open':'') + '">';
-  GRAMMAR_CATS.forEach(function(c){ html += '<div class="cat-chip' + (state.grammarSelected.indexOf(c)!==-1?' active':'') + '" data-gcat="' + esc(c) + '">' + esc(shortGrammarCat(c)) + '</div>'; });
+  GRAMMAR_CATS.forEach(function(c){ html += '<div class="cat-chip' + (state.grammarSelected.indexOf(c)!==-1?' active':'') + '" data-gcat="' + esc(c) + '">' + esc(grammarCatLabel(c)) + '</div>'; });
   html += '</div></div>';
   var modes = [['flip','Карточки'],['type','Написание']];
   html += '<div class="sub-toggle" style="margin-bottom:14px">';
@@ -2313,14 +2384,14 @@ function renderSessionSetup(){
     }
     html += '</div>';
     var lessonCats = categoriesForLessons(state.session.lessonSelected);
-    html += '<div class="hint" style="margin-top:8px">слова из тем: ' + (lessonCats.length ? lessonCats.map(shortCat).join(', ') : '—') + '</div></div>';
+    html += '<div class="hint" style="margin-top:8px">слова из тем: ' + (lessonCats.length ? lessonCats.map(catLabel).join(', ') : '—') + '</div></div>';
   } else {
     html += '<div class="panel"><div class="panel-row" id="sesscat-toggle"><span class="label">Категория слов</span>' +
       '<span class="value mono">' + (state.session.catSelected.length===CATEGORIES.length ? 'все' : state.session.catSelected.length + ' из ' + CATEGORIES.length) +
       '<span class="chev' + (state.session.catOpen?' open':'') + '">▾</span></span></div>';
     html += '<div class="cat-actions' + (state.session.catOpen?' open':'') + '"><button id="sesscat-all">Выбрать все</button><button id="sesscat-none">Снять все</button></div>';
     html += '<div class="cat-grid' + (state.session.catOpen?' open':'') + '">';
-    CATEGORIES.forEach(function(c){ html += '<div class="cat-chip' + (state.session.catSelected.indexOf(c)!==-1?' active':'') + '" data-sesscat="' + esc(c) + '">' + esc(shortCat(c)) + '</div>'; });
+    CATEGORIES.forEach(function(c){ html += '<div class="cat-chip' + (state.session.catSelected.indexOf(c)!==-1?' active':'') + '" data-sesscat="' + esc(c) + '">' + esc(catLabel(c)) + '</div>'; });
     html += '</div></div>';
   }
 
