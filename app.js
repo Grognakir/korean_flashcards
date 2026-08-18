@@ -2825,21 +2825,25 @@ function renderWritingBlank(){
       if(seg.c && comboSet[seg.c]){
         var cls = 'wblank-input' + (wp.checked ? (wp.blankCorrect[seg.c] ? ' ok' : ' bad') : '');
         var val = wp.checked ? ' value="' + esc(wp.blankTyped[seg.c] || '') + '"' : '';
-        var out = '<input class="' + cls + '" id="wblank-' + seg.c + '" autocomplete="off"' + val + (wp.checked?' disabled':'') + '/>';
-        if(wp.checked && !wp.blankCorrect[seg.c]){
-          out += '<span class="wblank-correct">→ ' + esc(findWritingChunkText(data, seg.c)) + '</span>';
-        }
-        return out;
+        return '<input class="' + cls + '" id="wblank-' + seg.c + '" autocomplete="off"' + val + (wp.checked?' disabled':'') + '/>';
       }
       return esc(seg.t);
     }).join('');
   }).join('<br><br>');
   html += '</div>';
   if(wp.checked){
-    var wrongCount = combo.filter(function(cid){ return !wp.blankCorrect[cid]; }).length;
-    html += wrongCount
-      ? '<div class="feedback bad">Ошибок: ' + wrongCount + ' из ' + combo.length + '. Ваш ответ и правильный вариант показаны над каждым пропуском.</div>'
-      : '<div class="feedback ok">Всё верно!</div>';
+    var wrongCids = combo.filter(function(cid){ return !wp.blankCorrect[cid]; });
+    if(wrongCids.length){
+      html += '<div class="feedback bad"><b>Ошибок: ' + wrongCids.length + ' из ' + combo.length + '</b>';
+      wrongCids.forEach(function(cid){
+        var typed = wp.blankTyped[cid];
+        html += '<div class="wblank-mistake"><span class="wblank-mine">Мой ответ: ' + (typed ? esc(typed) : '<i>(пусто)</i>') + '</span>' +
+          '<span class="wblank-fix">Правильно: ' + esc(findWritingChunkText(data, cid)) + '</span></div>';
+      });
+      html += '</div>';
+    } else {
+      html += '<div class="feedback ok">Всё верно!</div>';
+    }
     html += '<div class="controls"><button class="btn btn-primary" id="writing-next-iter">Дальше</button></div>';
   } else {
     html += '<div class="controls"><button class="btn btn-primary" id="writing-check-blanks">Проверить</button></div>';
