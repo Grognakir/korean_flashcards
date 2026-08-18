@@ -600,8 +600,7 @@ function initState(){
     qaSubOpen: false,
     themeSub: 'counters', // 'counters' | 'numbers' | 'datetime' | 'honorific' | 'position'
     themeCounterMode: 'choice', // 'choice' | 'type' | 'translate' (только для счётных слов)
-    themeNumbersView: 'practice', // 'practice' | 'table' (только для Числительные)
-    themeDatetimeView: 'practice', // 'practice' | 'table' (только для Даты и время)
+    themeView: 'practice', // 'practice' | 'table' (для разделов, где есть таблица-справочник)
     themeSubOpen: false,
     searchQuery: '',
     aiPanelOpen: false,
@@ -2320,7 +2319,7 @@ function renderNumbersTable(){
 }
 function renderDatetimeTable(){
   var days = [['월요일','понедельник'],['화요일','вторник'],['수요일','среда'],['목요일','четверг'],['금요일','пятница'],['토요일','суббота'],['일요일','воскресенье']];
-  var times = [['아침','утро'],['오전','до обеда (AM)'],['점심','обед / полдень'],['오후','после обеда (PM)'],['저녁','вечер'],['밤','ночь']];
+  var times = [['새벽','раннее утро / рассвет'],['아침','утро'],['오전','до обеда (AM)'],['낮','день'],['정오','полдень (12:00)'],['점심','обед / полдень'],['오후','после обеда (PM)'],['저녁','вечер'],['밤','ночь'],['자정','полночь (00:00)'],['한밤중','глубокая ночь']];
   var rows = Math.max(days.length, times.length);
   var html = '<div class="qcard"><div class="ref-detail">';
   html += '<table class="num-combo-table"><tr><th>요일</th><th>День недели</th><th class="num-col-gap">시간</th><th>Время суток</th></tr>';
@@ -2337,6 +2336,111 @@ function renderDatetimeTable(){
   html += '</div></div>';
   return html;
 }
+function renderCountersTable(){
+  var counters = [
+    ['개','предметы (универсальный счётчик)'], ['명','люди (обычно)'], ['마리','животные'],
+    ['병','бутылки'], ['잔','чашки/стаканы (напитки)'], ['장','плоские предметы (билеты, бумага, фото)'],
+    ['권','книги'], ['벌','комплект одежды'], ['켤레','пары обуви/носков'], ['대','техника, машины'],
+    ['자루','длинные предметы (ручки, ножи)'], ['송이','цветы'], ['그릇','порции в посуде'],
+    ['채','дома'], ['그루','деревья'], ['인분','порции еды'], ['정','таблетки'],
+    ['통','банки/контейнеры, арбузы'], ['분','люди (вежливо)'], ['시','часы (время)']
+  ];
+  var half = Math.ceil(counters.length/2);
+  var colA = counters.slice(0, half), colB = counters.slice(half);
+  var rows = Math.max(colA.length, colB.length);
+  var html = '<div class="qcard"><div class="ref-detail">';
+  html += '<table class="num-combo-table"><tr><th>단위</th><th>Значение</th><th class="num-col-gap">단위</th><th>Значение</th></tr>';
+  for(var i=0;i<rows;i++){
+    var a = colA[i], b = colB[i];
+    html += '<tr>';
+    html += a ? '<td class="kr">' + esc(a[0]) + '</td><td>' + esc(a[1]) + '</td>' : '<td></td><td></td>';
+    html += b ? '<td class="kr num-col-gap">' + esc(b[0]) + '</td><td>' + esc(b[1]) + '</td>' : '<td class="num-col-gap"></td><td></td>';
+    html += '</tr>';
+  }
+  html += '</table>';
+  html += '<div class="notes" style="margin-top:14px">수 + 단위 명사: 사과 세 개, 사람 두 명, 책 다섯 권.</div>';
+  html += '</div></div>';
+  return html;
+}
+function renderPositionTable(){
+  var pairs = [
+    ['위','над/сверху','아래','под/ниже'],
+    ['앞','перед/впереди','뒤','за/позади'],
+    ['안','внутри','밖','снаружи'],
+    ['오른쪽','справа','왼쪽','слева'],
+    ['옆','рядом/сбоку','사이','между'],
+    ['근처','поблизости','밑','под (вплотную)']
+  ];
+  var html = '<div class="qcard"><div class="ref-detail">';
+  html += '<table class="num-combo-table"><tr><th>위치</th><th>Значение</th><th class="num-col-gap">위치</th><th>Значение</th></tr>';
+  pairs.forEach(function(p){
+    html += '<tr><td class="kr">' + esc(p[0]) + '</td><td>' + esc(p[1]) + '</td>' +
+      '<td class="kr num-col-gap">' + esc(p[2]) + '</td><td>' + esc(p[3]) + '</td></tr>';
+  });
+  html += '</table>';
+  html += '<div class="notes" style="margin-top:14px">명사 + 위치 + 에: 책상 위에, 학교 앞에, 가방 안에.</div>';
+  html += '</div></div>';
+  return html;
+}
+function renderHonorificTable(){
+  var words = [
+    ['이름','성함','имя'], ['나이','연세','возраст'], ['집','댁','дом'], ['밥','진지','еда / трапеза'],
+    ['생일','생신','день рождения'], ['있다','계시다','быть, находиться'], ['없다','안 계시다','отсутствовать'],
+    ['자다','주무시다','спать'], ['먹다 / 마시다','드시다','есть / пить'], ['말하다','말씀하시다','говорить'],
+    ['아프다','편찮으시다','болеть'], ['죽다','돌아가시다','умереть'], ['주다','드리다','давать (старшему)']
+  ];
+  var particles = [['이/가','께서','подлежащее'], ['은/는','께서는','подлежащее (тема)'], ['에게/한테','께','кому (дательный)']];
+  var html = '<div class="qcard"><div class="ref-detail">';
+  html += '<div class="rd-title">보통 → 높임말</div>';
+  html += '<table><tr><th>Обычное</th><th>Уважительное</th><th>Значение</th></tr>';
+  words.forEach(function(w){
+    html += '<tr><td class="kr">' + esc(w[0]) + '</td><td class="kr">' + esc(w[1]) + '</td><td>' + esc(w[2]) + '</td></tr>';
+  });
+  html += '</table>';
+  html += '<div class="rd-title" style="margin-top:18px">우대 조사</div>';
+  html += '<table><tr><th>Обычная</th><th>Уважительная</th><th>Значение</th></tr>';
+  particles.forEach(function(p){
+    html += '<tr><td class="kr">' + esc(p[0]) + '</td><td class="kr">' + esc(p[1]) + '</td><td>' + esc(p[2]) + '</td></tr>';
+  });
+  html += '</table>';
+  html += '<div class="notes" style="margin-top:14px">К любому глаголу/прилагательному можно добавить -시-/-으시-: 읽다→읽으시다, 가다→가시다, 앉다→앉으시다.</div>';
+  html += '</div></div>';
+  return html;
+}
+function renderIrregularTable(){
+  var seen = {}, irr = [], reg = [];
+  (THEME_DATA.irregular || []).forEach(function(it){
+    if(seen[it.word]) return;
+    seen[it.word] = true;
+    (it.regular ? reg : irr).push(it);
+  });
+  irr.sort(function(a,b){ return a.word < b.word ? -1 : a.word > b.word ? 1 : 0; });
+  reg.sort(function(a,b){ return a.word < b.word ? -1 : a.word > b.word ? 1 : 0; });
+  var half = Math.ceil(irr.length/2);
+  var colA = irr.slice(0, half), colB = irr.slice(half);
+  var rows = Math.max(colA.length, colB.length);
+  var html = '<div class="qcard"><div class="ref-detail">';
+  html += '<div class="rd-title">불규칙 동사 · Неправильные глаголы (' + irr.length + ')</div>';
+  html += '<table class="num-combo-table"><tr><th>Слово</th><th>Форма</th><th class="num-col-gap">Слово</th><th>Форма</th></tr>';
+  for(var i=0;i<rows;i++){
+    var a = colA[i], b = colB[i];
+    html += '<tr>';
+    html += a ? '<td class="kr">' + esc(a.word) + '</td><td class="kr">' + esc(a.correct) + '</td>' : '<td></td><td></td>';
+    html += b ? '<td class="kr num-col-gap">' + esc(b.word) + '</td><td class="kr">' + esc(b.correct) + '</td>' : '<td class="num-col-gap"></td><td></td>';
+    html += '</tr>';
+  }
+  html += '</table>';
+  if(reg.length){
+    html += '<div class="rd-title" style="margin-top:18px">похожие обычные глаголы (НЕ исключения)</div>';
+    html += '<div class="notes">' + reg.map(function(it){ return esc(it.word) + ' — ' + esc(it.correct); }).join(', ') + '</div>';
+  }
+  html += '</div></div>';
+  return html;
+}
+var THEME_TABLE_RENDERERS = {
+  numbers: renderNumbersTable, datetime: renderDatetimeTable, counters: renderCountersTable,
+  position: renderPositionTable, honorific: renderHonorificTable, irregular: renderIrregularTable
+};
 function renderGrammarReference(){
   var html = '<div class="panel"><div class="panel-row" id="gcat-toggle"><span class="label">Темы</span>' +
     '<span class="value mono">' + (state.grammarSelected.length===GRAMMAR_CATS.length ? 'все' : state.grammarSelected.length + ' из ' + GRAMMAR_CATS.length) +
@@ -3046,17 +3150,12 @@ function renderThemeView(){
   html += '<div class="cat-grid' + (state.themeSubOpen?' open':'') + '">';
   subs.forEach(function(s){ html += '<div class="cat-chip' + (state.themeSub===s[0]?' active':'') + '" data-themesub="' + s[0] + '">' + esc(s[1]) + ' (' + esc(s[2]) + ')</div>'; });
   html += '</div></div>';
-  if(state.themeSub === 'numbers'){
+  var tableRenderer = THEME_TABLE_RENDERERS[state.themeSub];
+  if(tableRenderer){
     html += '<div class="sub-toggle" style="margin-bottom:14px">' +
-      '<button data-numview="practice" class="' + (state.themeNumbersView==='practice'?'active':'') + '">Практика</button>' +
-      '<button data-numview="table" class="' + (state.themeNumbersView==='table'?'active':'') + '">Таблица</button></div>';
-    if(state.themeNumbersView === 'table') return html + renderNumbersTable();
-  }
-  if(state.themeSub === 'datetime'){
-    html += '<div class="sub-toggle" style="margin-bottom:14px">' +
-      '<button data-dtview="practice" class="' + (state.themeDatetimeView==='practice'?'active':'') + '">Практика</button>' +
-      '<button data-dtview="table" class="' + (state.themeDatetimeView==='table'?'active':'') + '">Таблица</button></div>';
-    if(state.themeDatetimeView === 'table') return html + renderDatetimeTable();
+      '<button data-themeview="practice" class="' + (state.themeView==='practice'?'active':'') + '">Практика</button>' +
+      '<button data-themeview="table" class="' + (state.themeView==='table'?'active':'') + '">Таблица</button></div>';
+    if(state.themeView === 'table') return html + tableRenderer();
   }
   if(THEME_MODE_SECTIONS.indexOf(state.themeSub) !== -1){
     var modes = [['choice','Выбор'],['type','Впишите слово'],['translate','Переведите'],['mixed','Смешанный']];
@@ -3173,11 +3272,8 @@ function attachHandlers(){
   document.querySelectorAll('[data-grefview]').forEach(function(el){
     el.onclick = function(){ state.grammarRefView = el.getAttribute('data-grefview'); render(); };
   });
-  document.querySelectorAll('[data-numview]').forEach(function(el){
-    el.onclick = function(){ state.themeNumbersView = el.getAttribute('data-numview'); render(); };
-  });
-  document.querySelectorAll('[data-dtview]').forEach(function(el){
-    el.onclick = function(){ state.themeDatetimeView = el.getAttribute('data-dtview'); render(); };
+  document.querySelectorAll('[data-themeview]').forEach(function(el){
+    el.onclick = function(){ state.themeView = el.getAttribute('data-themeview'); render(); };
   });
   document.querySelectorAll('[data-refitem]').forEach(function(el){
     el.onclick = function(){
@@ -3396,7 +3492,7 @@ function attachHandlers(){
 
   // theme sub-tabs
   document.querySelectorAll('.cat-chip[data-themesub]').forEach(function(el){
-    el.onclick = function(){ state.themeSub = el.getAttribute('data-themesub'); state.themeSubOpen = false; resetThemeQueue(); render(); };
+    el.onclick = function(){ state.themeSub = el.getAttribute('data-themesub'); state.themeSubOpen = false; state.themeView = 'practice'; resetThemeQueue(); render(); };
   });
   var themesubToggle = document.getElementById('themesub-toggle');
   if(themesubToggle) themesubToggle.onclick = function(){ state.themeSubOpen = !state.themeSubOpen; render(); };
