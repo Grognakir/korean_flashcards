@@ -621,6 +621,8 @@ function initState(){
       checked: false, blankCorrect: {}, blankTyped: {}, totalCorrect: 0, totalBlanks: 0, freeText: '' },
     speakingPractice: { phase: 'pick', topicId: null, iterIndex: 0,
       checked: false, blankCorrect: {}, totalCorrect: 0, totalBlanks: 0 },
+    speakingSub: 'dialogue', // 'dialogue' | 'reading'
+    readingAloudPractice: { phase: 'pick', topicId: null },
     listeningPractice: { phase: 'pick', topicId: null, textShown: false },
     authReady: false,
     migrationPrompt: false,
@@ -1226,6 +1228,19 @@ function findListeningTopic(topicId){
 function startListeningTopic(topicId){
   if(!findListeningTopic(topicId)) return;
   state.listeningPractice = { phase:'show', topicId:topicId, textShown:false };
+}
+
+/* ============ READING ALOUD PRACTICE (읽고 말하기 — 소리 내어 읽기) ============ */
+function findReadingTopic(topicId){
+  for(var i=0; i<CURRICULUM_DATA.lessons.length; i++){
+    var lesson = CURRICULUM_DATA.lessons[i];
+    if(lesson.reading && lesson.reading.id === topicId) return { lesson: lesson, topic: lesson.reading };
+  }
+  return null;
+}
+function startReadingTopic(topicId){
+  if(!findReadingTopic(topicId)) return;
+  state.readingAloudPractice = { phase:'show', topicId:topicId };
 }
 
 /* ============ QA STANDALONE QUEUE ============ */
@@ -2962,12 +2977,47 @@ function renderSpeakingReread(){
     '<button class="btn btn-primary" id="speaking-back-pick">Выбрать другую тему</button></div></div>';
   return html;
 }
-function renderSpeakingView(){
+function renderDialogueSpeakingView(){
   var sp = state.speakingPractice;
   if(sp.phase === 'pick') return renderSpeakingPick();
   if(sp.phase === 'read') return renderSpeakingRead();
   if(sp.phase === 'blank') return renderSpeakingBlank();
   return renderSpeakingReread();
+}
+function renderReadingPick(){
+  var html = '<div class="panel"><div class="meaning" style="text-align:center;font-size:19px">Выберите текст</div>';
+  html += '<div class="cat-grid open">';
+  CURRICULUM_DATA.lessons.forEach(function(lesson){
+    if(!lesson.reading) return;
+    html += '<div class="cat-chip" data-readingtopic="' + esc(lesson.reading.id) + '">' + lesson.num + '과 ' + esc(lesson.reading.titleKr) + ' (' + esc(lesson.reading.titleRu) + ')</div>';
+  });
+  html += '</div></div>';
+  return html;
+}
+function renderReadingParagraphsPlain(topic){
+  var html = '<div class="notes kr" style="font-size:15px;line-height:1.7;margin-bottom:16px;padding:14px;background:var(--paper);border-radius:12px;max-width:none">';
+  html += topic.paragraphs.map(function(p){ return esc(p); }).join('<br><br>');
+  html += '</div>';
+  return html;
+}
+function renderReadingShow(){
+  var found = findReadingTopic(state.readingAloudPractice.topicId);
+  if(!found) return '<div class="empty">Текст не найден</div>';
+  var html = '<div class="qcard"><div class="meaning" style="text-align:center;font-size:18px">' + found.lesson.num + '과 ' + esc(found.topic.titleKr) + ' (' + esc(found.topic.titleRu) + ')</div>';
+  html += renderReadingParagraphsPlain(found.topic);
+  html += '<div class="controls"><button class="btn btn-primary" id="reading-back-pick">Выбрать другой текст</button></div></div>';
+  return html;
+}
+function renderReadingAloudView(){
+  if(state.readingAloudPractice.phase === 'pick') return renderReadingPick();
+  return renderReadingShow();
+}
+function renderSpeakingView(){
+  var html = '<div class="sub-toggle" style="margin-bottom:14px">' +
+    '<button data-speakingsub="dialogue" class="' + (state.speakingSub==='dialogue'?'active':'') + '">Диалоги</button>' +
+    '<button data-speakingsub="reading" class="' + (state.speakingSub==='reading'?'active':'') + '">Чтение вслух</button></div>';
+  html += state.speakingSub === 'reading' ? renderReadingAloudView() : renderDialogueSpeakingView();
+  return html;
 }
 
 function renderListeningPick(){
@@ -3545,6 +3595,15 @@ function attachHandlers(){
   if(listeningBackPick) listeningBackPick.onclick = function(){ state.listeningPractice.phase = 'pick'; render(); };
   var listeningToggleText = document.getElementById('listening-toggle-text');
   if(listeningToggleText) listeningToggleText.onclick = function(){ state.listeningPractice.textShown = !state.listeningPractice.textShown; render(); };
+
+  document.querySelectorAll('[data-speakingsub]').forEach(function(el){
+    el.onclick = function(){ state.speakingSub = el.getAttribute('data-speakingsub'); render(); };
+  });
+  document.querySelectorAll('[data-readingtopic]').forEach(function(el){
+    el.onclick = function(){ startReadingTopic(el.getAttribute('data-readingtopic')); render(); };
+  });
+  var readingBackPick = document.getElementById('reading-back-pick');
+  if(readingBackPick) readingBackPick.onclick = function(){ state.readingAloudPractice.phase = 'pick'; render(); };
 
   // qa sub-tabs
   document.querySelectorAll('.cat-chip[data-qasub]').forEach(function(el){
